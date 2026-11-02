@@ -1,0 +1,290 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Two themes, one token set. Values are "R G B" so Tailwind can apply alpha.
+ *  Penthouse: boardroom black, brushed gold, serif display. The default.
+ *  Cave:      tactical near-black, cold steel-blue signal, HUD grid, mono readouts.
+ */
+:root,
+[data-theme='penthouse'] {
+  --bg: 9 9 10;
+  --surface: 17 17 19;
+  --raised: 25 24 23;
+  --line: 46 41 33;
+  --ink: 238 233 223;
+  --muted: 160 152 139;
+  --faint: 104 98 89;
+  --accent: 201 169 97;
+  --accent-hi: 232 210 152;
+  --good: 95 191 160;
+  --warn: 224 150 64;
+  --bad: 212 94 82;
+  --font-display: var(--f-cormorant), 'Times New Roman', serif;
+  --font-body: var(--f-inter), system-ui, sans-serif;
+  --font-num: var(--f-cormorant), 'Times New Roman', serif;
+  --radius: 2px;
+  --glow: 0 0 0 1px rgb(var(--accent) / 0.06), 0 30px 80px -40px rgb(var(--accent) / 0.25);
+  color-scheme: dark;
+}
+
+[data-theme='cave'] {
+  --bg: 4 7 10;
+  --surface: 9 14 19;
+  --raised: 13 20 28;
+  --line: 30 45 60;
+  --ink: 215 228 240;
+  --muted: 125 146 166;
+  --faint: 74 92 110;
+  --accent: 95 180 255;
+  --accent-hi: 170 217 255;
+  --good: 79 209 161;
+  --warn: 240 180 76;
+  --bad: 255 95 109;
+  --font-display: var(--f-chakra), 'Arial Narrow', sans-serif;
+  --font-body: var(--f-inter), system-ui, sans-serif;
+  --font-num: var(--f-mono), ui-monospace, monospace;
+  --radius: 0px;
+  --glow: 0 0 0 1px rgb(var(--accent) / 0.08), 0 0 40px -12px rgb(var(--accent) / 0.35);
+  color-scheme: dark;
+}
+
+html,
+body {
+  background: rgb(var(--bg));
+  color: rgb(var(--ink));
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  min-height: 100vh;
+}
+
+/* Atmosphere: a low gold vignette in Penthouse, a HUD grid in Cave. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background: radial-gradient(1200px 600px at 70% -10%, rgb(var(--accent) / 0.07), transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, rgb(var(--accent) / 0.04), transparent 60%);
+}
+[data-theme='cave'] body::before {
+  background: linear-gradient(rgb(var(--accent) / 0.035) 1px, transparent 1px) 0 0 / 100% 32px,
+    linear-gradient(90deg, rgb(var(--accent) / 0.035) 1px, transparent 1px) 0 0 / 32px 100%,
+    radial-gradient(1000px 600px at 80% 0%, rgb(var(--accent) / 0.08), transparent 60%);
+}
+
+::selection {
+  background: rgb(var(--accent) / 0.35);
+}
+
+@layer components {
+  .panel {
+    position: relative;
+    background: linear-gradient(180deg, rgb(var(--raised) / 0.9), rgb(var(--surface) / 0.9));
+    border: 1px solid rgb(var(--line));
+    border-radius: var(--radius);
+    box-shadow: var(--glow);
+  }
+  /* Penthouse: a gold hairline across the top edge. */
+  [data-theme='penthouse'] .panel::before {
+    content: '';
+    position: absolute;
+    left: 24px;
+    right: 24px;
+    top: -1px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgb(var(--accent) / 0.55), transparent);
+  }
+  /* Cave: targeting brackets on the corners. */
+  [data-theme='cave'] .panel::before,
+  [data-theme='cave'] .panel::after {
+    content: '';
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    border-color: rgb(var(--accent) / 0.7);
+    pointer-events: none;
+  }
+  [data-theme='cave'] .panel::before {
+    top: -1px;
+    left: -1px;
+    border-top: 1px solid;
+    border-left: 1px solid;
+  }
+  [data-theme='cave'] .panel::after {
+    bottom: -1px;
+    right: -1px;
+    border-bottom: 1px solid;
+    border-right: 1px solid;
+  }
+
+  .eyebrow {
+    font-size: 10.5px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: rgb(var(--muted));
+    font-weight: 500;
+  }
+  [data-theme='cave'] .eyebrow {
+    font-family: var(--f-mono), monospace;
+    letter-spacing: 0.16em;
+  }
+
+  .display {
+    font-family: var(--font-display);
+    font-weight: 500;
+    letter-spacing: 0.01em;
+  }
+  [data-theme='cave'] .display {
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 600;
+  }
+
+  .num {
+    font-family: var(--font-num);
+    font-variant-numeric: lining-nums tabular-nums;
+  }
+
+  .rule {
+    height: 1px;
+    background: linear-gradient(90deg, rgb(var(--accent) / 0.5), rgb(var(--line)) 40%, transparent);
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.9rem;
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    font-weight: 600;
+    border: 1px solid rgb(var(--accent) / 0.6);
+    color: rgb(var(--accent-hi));
+    background: rgb(var(--accent) / 0.08);
+    border-radius: var(--radius);
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+    white-space: nowrap;
+  }
+  .btn:hover {
+    background: rgb(var(--accent) / 0.18);
+    border-color: rgb(var(--accent));
+  }
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: wait;
+  }
+  .btn-ghost {
+    @apply btn;
+    border-color: rgb(var(--line));
+    color: rgb(var(--muted));
+    background: transparent;
+  }
+  .btn-ghost:hover {
+    color: rgb(var(--ink));
+    border-color: rgb(var(--muted) / 0.6);
+    background: rgb(var(--ink) / 0.03);
+  }
+  .btn-danger {
+    @apply btn;
+    border-color: rgb(var(--bad) / 0.6);
+    color: rgb(var(--bad));
+    background: rgb(var(--bad) / 0.06);
+  }
+  .btn-danger:hover {
+    background: rgb(var(--bad) / 0.14);
+    border-color: rgb(var(--bad));
+  }
+
+  .field {
+    width: 100%;
+    background: rgb(var(--bg) / 0.6);
+    border: 1px solid rgb(var(--line));
+    border-radius: var(--radius);
+    padding: 0.55rem 0.7rem;
+    font-size: 14px;
+    color: rgb(var(--ink));
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .field::placeholder {
+    color: rgb(var(--faint));
+  }
+  .field:focus {
+    border-color: rgb(var(--accent) / 0.8);
+    box-shadow: 0 0 0 3px rgb(var(--accent) / 0.12);
+  }
+  select.field {
+    appearance: none;
+    background-image: linear-gradient(45deg, transparent 50%, rgb(var(--muted)) 50%), linear-gradient(135deg, rgb(var(--muted)) 50%, transparent 50%);
+    background-position: calc(100% - 16px) 55%, calc(100% - 11px) 55%;
+    background-size: 5px 5px;
+    background-repeat: no-repeat;
+    padding-right: 2rem;
+  }
+  .label {
+    display: block;
+    margin-bottom: 0.35rem;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgb(var(--muted));
+  }
+
+  .tbl {
+    width: 100%;
+    font-size: 13.5px;
+    border-collapse: collapse;
+  }
+  .tbl th {
+    text-align: left;
+    font-weight: 500;
+    font-size: 10.5px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: rgb(var(--faint));
+    padding: 0.6rem 0.75rem;
+    border-bottom: 1px solid rgb(var(--line));
+    white-space: nowrap;
+  }
+  .tbl td {
+    padding: 0.7rem 0.75rem;
+    border-bottom: 1px solid rgb(var(--line) / 0.55);
+    vertical-align: middle;
+  }
+  .tbl tbody tr:hover td {
+    background: rgb(var(--accent) / 0.03);
+  }
+
+  .link {
+    color: rgb(var(--accent-hi));
+    text-decoration: none;
+  }
+  .link:hover {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+}
+
+/* Focus ring everywhere. */
+:focus-visible {
+  outline: 2px solid rgb(var(--accent));
+  outline-offset: 2px;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.8); }
+}
+.live-dot {
+  animation: pulse-dot 2.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .live-dot { animation: none; }
+}
