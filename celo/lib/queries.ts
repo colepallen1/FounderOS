@@ -1,6 +1,7 @@
 import 'server-only';
 import { q, one } from './db';
-import { monthSeries, type MonthBucket } from './money';
+import { itemsMrrCents, monthSeries, type MonthBucket } from './money';
+import { forecastByMonth, forecastCharges, sumWithin, type ForecastCharge, type ForecastSub, type ManualRetainer } from './forecast';
 import type { AdTotals, CalEvent, Client, Email, Objective, Payment, Recurring, Subscription, Task } from './types';
 
 import { TZ } from './config';
@@ -22,7 +23,8 @@ const PAYMENT_SELECT = `SELECT p.id, p.source, p.client_id, c.name AS client_nam
   LEFT JOIN stripe_customers sc ON sc.id = p.stripe_customer_id`;
 
 const SUB_SELECT = `SELECT s.id, s.stripe_customer_id, COALESCE(NULLIF(sc.name, ''), NULLIF(sc.email, ''), s.stripe_customer_id) AS customer_label,
-  c.name AS client_name, c.slug AS client_slug, s.status, s.mrr_cents, s.currency, s.current_period_end::text, s.cancel_at_period_end, s.description
+  c.name AS client_name, c.slug AS client_slug, s.status, s.mrr_cents, s.currency, s.current_period_end::text,
+  (s.cancel_at_period_end OR s.cancel_at IS NOT NULL) AS cancel_at_period_end, s.description
   FROM subscriptions s LEFT JOIN stripe_customers sc ON sc.id = s.stripe_customer_id
   LEFT JOIN clients c ON c.stripe_customer_ids @> to_jsonb(s.stripe_customer_id)`;
 
@@ -186,7 +188,7 @@ export async function listSubscriptions(opts: { clientCustomerIds?: string[]; li
 export async function upcomingRenewals(days = 7): Promise<{ label: string; slug: string | null; when: string; cents: number; source: 'stripe' | 'manual'; cancelling: boolean }[]> {
   const stripe = await q<{ label: string; slug: string | null; when: string; cents: number; cancelling: boolean }>(
     `SELECT COALESCE(c.name, NULLIF(sc.name, ''), NULLIF(sc.email, ''), s.stripe_customer_id) AS label, c.slug, s.current_period_end::text AS when,
-       s.mrr_cents AS cents, s.cancel_at_period_end AS cancelling
+       s.mrr_cents AS cents, (s.cancel_at_period_end OR s.cancel_at IS NOT NULL) AS cancelling
      FROM subscriptions s LEFT JOIN stripe_customers sc ON sc.id = s.stripe_customer_id
      LEFT JOIN clients c ON c.stripe_customer_ids @> to_jsonb(s.stripe_customer_id)
      WHERE s.status IN ('active','past_due','trialing') AND s.current_period_end BETWEEN now() AND now() + make_interval(days => $1)`,
@@ -264,4 +266,49 @@ export async function importableStripeCount(): Promise<number> {
      WHERE s.status IN ('active','past_due','paused') AND NOT EXISTS (SELECT 1 FROM clients c WHERE c.stripe_customer_ids @> to_jsonb(sc.id))`,
   );
   return row?.n ?? 0;
+}
+
+// ── Forecast ───────────────────────────────────────────────────────────────
+
+export type Forecast = {
+  charges: ForecastCharge[];
+  next30: number;
+  next60: number;
+  next90: number;
+  months: { key: string; label: string; cents: number }[];
+  /** Monthly value of subscriptions still in a trial, with the day billing starts. */
+  starting: { label: string; client_slug: string | null; monthly_cents: number; starts: string }[];
+};
+
+export async function forecast(): Promise<Forecast> {
+  const subs = await q<ForecastSub & { label: string }>(
+    `SELECT s.id, COALESCE(c.name, NULLIF(sc.name, ''), NULLIF(sc.email, ''), s.stripe_customer_id) AS label, c.slug AS client_slug,
+       s.status, s.items, s.trial_end::text, s.cancel_at::text, s.cancel_at_period_end
+     FROM subscriptions s LEFT JOIN stripe_customers sc ON sc.id = s.stripe_customer_id
+     LEFT JOIN clients c ON c.stripe_customer_ids @> to_jsonb(s.stripe_customer_id)
+     WHERE s.status IN ('active','past_due','trialing')`,
+  );
+  const manual = await q<ManualRetainer>(
+    `SELECT name AS label, slug AS client_slug, retainer_cents AS cents,
+       COALESCE(EXTRACT(DAY FROM renewal_date), EXTRACT(DAY FROM start_date), 1)::int AS anchor_day
+     FROM clients WHERE status IN ('active','onboarding') AND retainer_cents > 0 AND jsonb_array_length(stripe_customer_ids) = 0`,
+  );
+  const now = new Date();
+  const charges = forecastCharges(subs, manual, now, 183);
+  const starting = subs
+    .filter((s) => s.status === 'trialing' && s.trial_end && !s.cancel_at_period_end)
+    .map((s) => ({
+      label: s.label,
+      client_slug: s.client_slug,
+      monthly_cents: itemsMrrCents(s.items.map((i) => ({ price: { unit_amount: i.amount_cents, recurring: { interval: i.interval, interval_count: i.interval_count } } }))),
+      starts: s.trial_end!,
+    }));
+  return {
+    charges,
+    next30: sumWithin(charges, now, 30),
+    next60: sumWithin(charges, now, 60),
+    next90: sumWithin(charges, now, 90),
+    months: forecastByMonth(charges, now, 6),
+    starting,
+  };
 }

@@ -6,7 +6,7 @@ import { Badge, Empty, NotConfigured, PageHeader, Panel, STATUS_TONE, Stat } fro
 import { fmtDate, fmtTime } from '@/components/format';
 import { TZ } from '@/lib/config';
 import { formatMoney, pctChange } from '@/lib/money';
-import { events, listClients, moneySummary, todayInTz, todaysTasks, upcomingRenewals } from '@/lib/queries';
+import { events, forecast, listClients, moneySummary, todayInTz, todaysTasks, upcomingRenewals } from '@/lib/queries';
 import { configured } from '@/lib/sync';
 
 export const dynamic = 'force-dynamic';
@@ -18,19 +18,19 @@ function greeting(): string {
 
 export default async function Command() {
   const today = todayInTz();
-  const [money, work, renewals, todayEvents, clients, conn] = await Promise.all([
+  const [money, work, renewals, todayEvents, clients, conn, f] = await Promise.all([
     moneySummary(),
     todaysTasks(),
     upcomingRenewals(7),
     events({ todayOnly: true }),
     listClients(),
     configured(),
+    forecast(),
   ]);
   const cur = money.currency;
   const delta = pctChange(money.cashThisMonth, money.cashLastMonthToDate);
   const owner = process.env.CELO_OWNER_NAME;
   const dueNow = [...work.overdue, ...work.today];
-  const renewalTotal = renewals.reduce((s, r) => s + r.cents, 0);
   const activeClients = clients.filter((c) => c.status === 'active' || c.status === 'onboarding');
 
   return (
@@ -55,6 +55,11 @@ export default async function Command() {
               <>
                 {money.activeSubs} Stripe retainer{money.activeSubs === 1 ? '' : 's'}
                 {money.manualMrr > 0 && <> · {formatMoney(money.manualMrr, cur, { compact: true })} off-Stripe</>}
+                {f.starting.map((s) => (
+                  <span key={s.label + s.starts} className="block text-accent-hi">
+                    +{formatMoney(s.monthly_cents, cur)}/mo from {fmtDate(s.starts)}
+                  </span>
+                ))}
               </>
             ) : (
               <span className="text-accent-hi">{money.manualMrr ? 'Manual retainers · ' : ''}Connect Stripe</span>
@@ -84,9 +89,10 @@ export default async function Command() {
           sub={money.failed30d || money.pastDue ? `${formatMoney(money.failed30dCents, cur)} failed · ${money.pastDue} past due` : 'All payments clearing'}
         />
         <Stat
-          label="Renewing · 7 days"
-          value={renewals.length}
-          sub={renewals.length ? `${formatMoney(renewalTotal, cur)} due to renew` : 'Nothing renewing this week'}
+          label="Expected · 30 days"
+          value={formatMoney(f.next30, cur, { compact: true })}
+          href="/money"
+          sub={`${renewals.length ? `${renewals.length} renewing this week · ` : ''}${formatMoney(f.next90, cur, { compact: true })} over 90 days`}
           tone={renewals.some((r) => r.cancelling) ? 'warn' : undefined}
         />
       </div>

@@ -135,6 +135,11 @@ CREATE TABLE IF NOT EXISTS settings (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Billing detail for the revenue forecast (added 2026-11-02).
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS items JSONB NOT NULL DEFAULT '[]';
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS trial_end TIMESTAMPTZ;
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS cancel_at TIMESTAMPTZ;
+
 CREATE TABLE IF NOT EXISTS sync_runs (
   source TEXT PRIMARY KEY,
   last_started_at TIMESTAMPTZ,

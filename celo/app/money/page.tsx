@@ -4,7 +4,8 @@ import { ImportStripeButton } from '@/components/ImportStripeButton';
 import { Badge, Empty, NotConfigured, PageHeader, Panel, STATUS_TONE, Stat } from '@/components/ui';
 import { fmtDate } from '@/components/format';
 import { formatMoney } from '@/lib/money';
-import { clientOptions, listPayments, listSubscriptions, moneySummary, stripeCustomers } from '@/lib/queries';
+import { clientOptions, forecast, listPayments, listSubscriptions, moneySummary, stripeCustomers } from '@/lib/queries';
+import { ForecastPanel } from '@/components/ForecastPanel';
 import { configured } from '@/lib/sync';
 
 export const metadata = { title: 'Money' };
@@ -19,12 +20,13 @@ const FILTERS = [
 
 export default async function Money({ searchParams }: { searchParams: { status?: string } }) {
   const status = FILTERS.some((f) => f.id === searchParams.status) ? searchParams.status : '';
-  const [money, payments, subs, clients, conn] = await Promise.all([
+  const [money, payments, subs, clients, conn, f] = await Promise.all([
     moneySummary(),
     listPayments({ status: status || undefined, limit: 250 }),
     listSubscriptions({ live: true }),
     clientOptions(),
     configured(),
+    forecast(),
   ]);
   const customers = conn.stripe ? await stripeCustomers() : [];
   const unlinkedPaying = customers.filter((c) => !c.linked_to && subs.some((s) => s.stripe_customer_id === c.id));
@@ -37,6 +39,10 @@ export default async function Money({ searchParams }: { searchParams: { status?:
         <Stat label="Annual run rate" value={formatMoney(money.mrr * 12, cur, { compact: true })} sub="MRR x 12" />
         <Stat label="Collected this month" value={formatMoney(money.cashThisMonth, cur, { compact: true })} sub={`${formatMoney(money.cashLastMonthToDate, cur)} by this point last month`} />
         <Stat label="Past due" value={money.pastDue} tone={money.pastDue ? 'bad' : undefined} sub={`${money.failed30d} failed charge${money.failed30d === 1 ? '' : 's'} in 30 days`} />
+      </div>
+
+      <div className="mt-4">
+        <ForecastPanel f={f} currency={cur} />
       </div>
 
       <Panel title="Log an off-Stripe payment" icon="plus" className="mt-4">
