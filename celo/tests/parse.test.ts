@@ -10,6 +10,7 @@ describe('slug and domains', () => {
   });
   it('extracts domains from mixed input', () => {
     expect(parseDomains('https://www.Acme.com/about, dana@acmedental.co  bad, acme.com')).toEqual(['acme.com', 'acmedental.co']);
+    expect(parseDomains('owner@gmail.com, acme.com, x@icloud.com')).toEqual(['acme.com']);
     expect(emailDomain('Dana <dana@Acme.com>')).toBe('acme.com');
   });
 });

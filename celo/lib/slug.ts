@@ -10,6 +10,12 @@ export function slugify(name: string): string {
   );
 }
 
+/** Personal mail providers: matching on these would tie every Gmail sender to one client. */
+export const FREE_MAIL = new Set([
+  'gmail.com', 'googlemail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'live.com', 'msn.com', 'icloud.com', 'me.com',
+  'mac.com', 'aol.com', 'proton.me', 'protonmail.com', 'gmx.com', 'yandex.com', 'zoho.com', 'mail.com',
+]);
+
 /** "acme.com, https://www.foo.io/x, bob@bar.co" -> ["acme.com","foo.io","bar.co"] */
 export function parseDomains(input: string): string[] {
   const out = new Set<string>();
@@ -18,7 +24,7 @@ export function parseDomains(input: string): string[] {
     if (!s) continue;
     if (s.includes('@')) s = s.split('@').pop()!;
     s = s.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0];
-    if (/^[a-z0-9.-]+\.[a-z]{2,}$/.test(s)) out.add(s);
+    if (/^[a-z0-9.-]+\.[a-z]{2,}$/.test(s) && !FREE_MAIL.has(s)) out.add(s);
   }
   return [...out];
 }

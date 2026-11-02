@@ -3,13 +3,14 @@ import { Icon } from '@/components/Icon';
 import { Badge, Empty, PageHeader, STATUS_TONE } from '@/components/ui';
 import { fmtDate } from '@/components/format';
 import { formatMoney } from '@/lib/money';
-import { listClients } from '@/lib/queries';
+import { importableStripeCount, listClients } from '@/lib/queries';
+import { ImportStripeButton } from '@/components/ImportStripeButton';
 
 export const metadata = { title: 'Clients' };
 export const dynamic = 'force-dynamic';
 
 export default async function Clients({ searchParams }: { searchParams: { show?: string } }) {
-  const all = await listClients();
+  const [all, importable] = await Promise.all([listClients(), importableStripeCount()]);
   const showAll = searchParams.show === 'all';
   const clients = showAll ? all : all.filter((c) => c.status !== 'churned');
   const mrr = all.reduce((s, c) => s + (c.status === 'churned' ? 0 : c.mrr_cents), 0);
@@ -22,7 +23,8 @@ export default async function Clients({ searchParams }: { searchParams: { show?:
             {showAll ? 'Hide churned' : `Show churned (${churned})`}
           </Link>
         )}
-        <Link href="/clients/new" className="btn">
+        {importable > 0 && <ImportStripeButton count={importable} />}
+        <Link href="/clients/new" className={importable > 0 ? 'btn-ghost' : 'btn'}>
           <Icon name="plus" size={14} /> New client
         </Link>
       </PageHeader>

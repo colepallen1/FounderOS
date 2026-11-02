@@ -18,6 +18,15 @@ describe('itemsMrrCents', () => {
   });
 });
 
+describe('Celo Digital live book (2026-11-02)', () => {
+  it('five active retainers, three of them biweekly, come to about $9,698 MRR', () => {
+    const subs = [price(175000, 'month'), price(75000, 'week', 2), price(20000, 'week', 2), price(258000, 'week', 2), price(30000, 'month')];
+    const total = subs.reduce((s, p) => s + itemsMrrCents([{ price: p }]), 0);
+    expect(total).toBe(969833);
+    expect(itemsMrrCents([{ price: price(258000, 'week', 2) }])).toBe(559000);
+  });
+});
+
 describe('status and parsing', () => {
   it('counts active and past_due toward MRR only', () => {
     expect(['active', 'past_due', 'trialing', 'canceled', 'unpaid'].map(countsTowardMrr)).toEqual([true, true, false, false, false]);

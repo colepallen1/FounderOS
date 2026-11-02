@@ -33,7 +33,9 @@ export async function upsertCustomer(c: Stripe.Customer | Stripe.DeletedCustomer
 
 export async function upsertSubscription(s: Stripe.Subscription, productNames?: Map<string, string>) {
   const items = s.items.data;
-  const mrr = countsTowardMrr(s.status) ? itemsMrrCents(items as unknown as ItemLike[]) : 0;
+  // A subscription with payment collection paused bills nothing, so it adds nothing to MRR.
+  const paused = Boolean(s.pause_collection);
+  const mrr = countsTowardMrr(s.status) && !paused ? itemsMrrCents(items as unknown as ItemLike[]) : 0;
   // Since the 2025 "basil" API the billing period lives on each item.
   const periodEnd = items.reduce<number | null>((min, it) => {
     const end = (it as unknown as { current_period_end?: number }).current_period_end ?? null;
@@ -57,7 +59,7 @@ export async function upsertSubscription(s: Stripe.Subscription, productNames?: 
     [
       s.id,
       customerId(s.customer),
-      s.status,
+      paused && s.status === 'active' ? 'paused' : s.status,
       mrr,
       s.currency,
       periodEnd ? new Date(periodEnd * 1000).toISOString() : null,

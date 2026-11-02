@@ -105,6 +105,31 @@ export async function setStripeLinks(form: FormData) {
   refresh(c?.slug);
 }
 
+/**
+ * One click: every Stripe customer with a live subscription who is not on any
+ * client yet becomes an active client, already linked. Safe to run repeatedly.
+ */
+export async function importStripeClients() {
+  const rows = await q<{ id: string; name: string; email: string; mrr: number }>(
+    `SELECT sc.id, sc.name, sc.email, COALESCE(sum(s.mrr_cents), 0)::int AS mrr
+     FROM stripe_customers sc JOIN subscriptions s ON s.stripe_customer_id = sc.id
+     WHERE s.status IN ('active','past_due','paused')
+       AND NOT EXISTS (SELECT 1 FROM clients c WHERE c.stripe_customer_ids @> to_jsonb(sc.id))
+     GROUP BY sc.id, sc.name, sc.email`,
+  );
+  for (const r of rows) {
+    const name = r.name || r.email.split('@')[0] || r.id;
+    await q(
+      `INSERT INTO clients (id, slug, name, status, contact_email, email_domains, stripe_customer_ids, start_date)
+       VALUES ($1,$2,$3,'active',$4,$5,$6,(SELECT min(paid_at)::date FROM payments WHERE stripe_customer_id = $7 AND status = 'paid'))`,
+      [newId('cli'), await uniqueSlug(name), name, r.email.toLowerCase(), JSON.stringify(parseDomains(r.email)), JSON.stringify([r.id]), r.id],
+    );
+  }
+  await relinkPayments();
+  refresh();
+  return rows.length;
+}
+
 export async function deleteClient(form: FormData) {
   const id = str(form, 'id');
   if (str(form, 'confirm') !== 'DELETE') return;

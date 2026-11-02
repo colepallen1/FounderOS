@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { ManualPaymentForm, PaymentsTable } from '@/components/Payments';
+import { ImportStripeButton } from '@/components/ImportStripeButton';
 import { Badge, Empty, NotConfigured, PageHeader, Panel, STATUS_TONE, Stat } from '@/components/ui';
 import { fmtDate } from '@/components/format';
 import { formatMoney } from '@/lib/money';
@@ -43,8 +44,8 @@ export default async function Money({ searchParams }: { searchParams: { status?:
       </Panel>
 
       {unlinkedPaying.length > 0 && (
-        <Panel title="Stripe customers not linked to a client" icon="alert" className="mt-4">
-          <p className="mb-3 text-[13px] text-muted">These customers pay a subscription but are not on any client page, so their revenue is missing from client totals. Open a client, then Settings, to link them.</p>
+        <Panel title="Stripe customers not linked to a client" icon="alert" className="mt-4" action={<ImportStripeButton count={unlinkedPaying.length} />}>
+          <p className="mb-3 text-[13px] text-muted">These customers pay a subscription but are not on any client page, so their revenue is missing from client totals. Import them as clients in one click, or link each one from a client's Settings tab.</p>
           <div className="flex flex-wrap gap-2">
             {unlinkedPaying.map((c) => (
               <Badge key={c.id} tone="warn">
