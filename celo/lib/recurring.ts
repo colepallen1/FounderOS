@@ -56,3 +56,35 @@ export function describeRule(cadence: Cadence, anchor: number): string {
   const sfx = anchor % 10 === 1 && anchor !== 11 ? 'st' : anchor % 10 === 2 && anchor !== 12 ? 'nd' : anchor % 10 === 3 && anchor !== 13 ? 'rd' : 'th';
   return `Monthly on the ${anchor}${sfx}`;
 }
+
+export type PayCadence = { interval: 'week' | 'month'; interval_count: number };
+
+/** Next billing day after `day` for a payment cadence. Monthly keeps the anchor day, clamped to short months. */
+export function nextPaymentDate(day: string, c: PayCadence, anchorDay: number): string {
+  const d = new Date(`${day}T00:00:00Z`);
+  if (c.interval === 'week') {
+    d.setUTCDate(d.getUTCDate() + 7 * c.interval_count);
+    return toDay(d);
+  }
+  const y = d.getUTCFullYear();
+  const m = d.getUTCMonth() + c.interval_count;
+  const last = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+  return toDay(new Date(Date.UTC(y, m, Math.min(anchorDay, last))));
+}
+
+/** All due dates from `next` up to and including `today`, and the next one after that. */
+export function duePayments(next: string, today: string, c: PayCadence, anchorDay: number): { due: string[]; next: string } {
+  const due: string[] = [];
+  let cur = next;
+  for (let guard = 0; guard < 120 && cur <= today; guard++) {
+    due.push(cur);
+    cur = nextPaymentDate(cur, c, anchorDay);
+  }
+  return { due, next: cur };
+}
+
+export const PAY_CADENCES: Record<string, PayCadence & { label: string; perMonth: number }> = {
+  weekly: { interval: 'week', interval_count: 1, label: 'Weekly', perMonth: 52 / 12 },
+  biweekly: { interval: 'week', interval_count: 2, label: 'Every 2 weeks', perMonth: 26 / 12 },
+  monthly: { interval: 'month', interval_count: 1, label: 'Monthly', perMonth: 1 },
+};

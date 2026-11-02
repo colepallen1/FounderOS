@@ -35,3 +35,18 @@ describe('dueOccurrences', () => {
     expect(describeRule('monthly', 11)).toBe('Monthly on the 11th');
   });
 });
+
+import { duePayments, nextPaymentDate, PAY_CADENCES } from '@/lib/recurring';
+
+describe('recurring payments', () => {
+  it('steps weekly, biweekly and monthly (month-end safe)', () => {
+    expect(nextPaymentDate('2026-11-02', PAY_CADENCES.biweekly, 2)).toBe('2026-11-16');
+    expect(nextPaymentDate('2026-11-02', PAY_CADENCES.weekly, 2)).toBe('2026-11-09');
+    expect(nextPaymentDate('2027-01-31', PAY_CADENCES.monthly, 31)).toBe('2027-02-28');
+    expect(nextPaymentDate('2027-02-28', PAY_CADENCES.monthly, 31)).toBe('2027-03-31');
+  });
+  it('logs every missed date once and returns the next', () => {
+    expect(duePayments('2026-11-02', '2026-11-01', PAY_CADENCES.monthly, 2)).toEqual({ due: [], next: '2026-11-02' });
+    expect(duePayments('2026-09-02', '2026-11-02', PAY_CADENCES.monthly, 2)).toEqual({ due: ['2026-09-02', '2026-10-02', '2026-11-02'], next: '2026-12-02' });
+  });
+});

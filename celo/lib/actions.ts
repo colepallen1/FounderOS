@@ -11,7 +11,8 @@ import { parseDomains, slugify } from './slug';
 import { setSecret, setSetting, SECRET_KEYS, type SecretKey } from './settings';
 import { ensureWebhook, relinkPayments } from './integrations/stripe';
 import { ignoreCustomers, importStripeClients as importClientsFromStripe, uniqueSlug } from './clients';
-import { materializeRecurring, runSync, type SourceId } from './sync';
+import { materializeRecurring, materializeRecurringPayments, runSync, type SourceId } from './sync';
+import { PAY_CADENCES } from './recurring';
 import { CLIENT_STATUSES, TASK_STATUS_IDS } from './types';
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? '').trim();
@@ -235,12 +236,40 @@ export async function addManualPayment(form: FormData) {
   const cents = parseAmountToCents(str(form, 'amount'));
   const date = dateOrNull(str(form, 'paid_at'));
   if (!cents || !date) return;
-  await q(
-    `INSERT INTO payments (id, source, client_id, amount_cents, currency, status, method, description, paid_at)
-     VALUES ($1,'manual',$2,$3,$4,'paid',$5,$6,$7)`,
-    [newId('man'), str(form, 'client_id') || null, cents, (str(form, 'currency') || 'usd').toLowerCase(), str(form, 'method'), str(form, 'description'), `${date}T12:00:00Z`],
-  );
+  const clientId = str(form, 'client_id') || null;
+  const currency = (str(form, 'currency') || 'usd').toLowerCase();
+  const repeats = str(form, 'repeats');
+  const cadence = PAY_CADENCES[repeats];
+  if (!cadence) {
+    await q(
+      `INSERT INTO payments (id, source, client_id, amount_cents, currency, status, method, description, paid_at)
+       VALUES ($1,'manual',$2,$3,$4,'paid',$5,$6,$7)`,
+      [newId('man'), clientId, cents, currency, str(form, 'method'), str(form, 'description'), `${date}T12:00:00Z`],
+    );
+  } else {
+    // A schedule: the first date logs now if it has come, later ones log themselves on the day.
+    await q(
+      `INSERT INTO recurring_payments (id, client_id, amount_cents, currency, interval, interval_count, next_date, method, description)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      [newId('rpy'), clientId, cents, currency, cadence.interval, cadence.interval_count, date, str(form, 'method'), str(form, 'description')],
+    );
+    // Keep the client's monthly retainer in step, so MRR and the forecast count it once.
+    if (clientId) {
+      await q(`UPDATE clients SET retainer_cents = $2 WHERE id = $1 AND jsonb_array_length(stripe_customer_ids) = 0`, [clientId, Math.round(cents * cadence.perMonth)]);
+    }
+    await materializeRecurringPayments();
+  }
   refresh(str(form, 'client_slug'));
+}
+
+export async function setRecurringPaymentActive(id: string, active: boolean) {
+  await q(`UPDATE recurring_payments SET active = $2 WHERE id = $1`, [id, active]);
+  revalidatePath('/', 'layout');
+}
+
+export async function deleteRecurringPayment(id: string) {
+  await q(`DELETE FROM recurring_payments WHERE id = $1`, [id]);
+  revalidatePath('/', 'layout');
 }
 
 export async function deleteManualPayment(id: string) {

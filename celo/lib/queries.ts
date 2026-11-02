@@ -1,6 +1,7 @@
 import 'server-only';
 import { q, one } from './db';
 import { itemsMrrCents, monthSeries, type MonthBucket } from './money';
+import { nextPaymentDate, toDay } from './recurring';
 import { forecastByMonth, forecastCharges, sumWithin, type ForecastCharge, type ForecastSub, type ManualRetainer } from './forecast';
 import type { AdTotals, CalEvent, Client, Email, Objective, Payment, Recurring, Subscription, Task } from './types';
 
@@ -291,10 +292,22 @@ export async function forecast(): Promise<Forecast> {
   const manual = await q<ManualRetainer>(
     `SELECT name AS label, slug AS client_slug, retainer_cents AS cents,
        COALESCE(EXTRACT(DAY FROM renewal_date), EXTRACT(DAY FROM start_date), 1)::int AS anchor_day
-     FROM clients WHERE status IN ('active','onboarding') AND retainer_cents > 0 AND jsonb_array_length(stripe_customer_ids) = 0`,
+     FROM clients c WHERE status IN ('active','onboarding') AND retainer_cents > 0 AND jsonb_array_length(stripe_customer_ids) = 0
+       AND NOT EXISTS (SELECT 1 FROM recurring_payments r WHERE r.client_id = c.id AND r.active)`,
   );
   const now = new Date();
-  const charges = forecastCharges(subs, manual, now, 183);
+  const horizon = toDay(new Date(now.getTime() + 183 * 86400000));
+  const scheduled: ForecastCharge[] = [];
+  for (const r of await listRecurringPayments()) {
+    if (!r.active) continue;
+    const anchor = Number(r.next_date.slice(8));
+    let d = r.next_date;
+    for (let g = 0; g < 200 && d <= horizon; g++) {
+      if (d >= toDay(now)) scheduled.push({ date: d, cents: r.amount_cents, label: r.client_name ?? (r.description || 'Recurring payment'), client_slug: r.client_slug, kind: 'manual' });
+      d = nextPaymentDate(d, { interval: r.interval, interval_count: r.interval_count }, anchor);
+    }
+  }
+  const charges = [...forecastCharges(subs, manual, now, 183), ...scheduled].sort((a, b) => a.date.localeCompare(b.date) || b.cents - a.cents);
   const starting = subs
     .filter((s) => s.status === 'trialing' && s.trial_end && !s.cancel_at_period_end)
     .map((s) => ({
@@ -311,4 +324,16 @@ export async function forecast(): Promise<Forecast> {
     months: forecastByMonth(charges, now, 6),
     starting,
   };
+}
+
+export type RecurringPayment = { id: string; client_id: string | null; client_name: string | null; client_slug: string | null; amount_cents: number; currency: string; interval: 'week' | 'month'; interval_count: number; next_date: string; method: string; description: string; active: boolean };
+
+export async function listRecurringPayments(clientId?: string): Promise<RecurringPayment[]> {
+  return q<RecurringPayment>(
+    `SELECT r.id, r.client_id, c.name AS client_name, c.slug AS client_slug, r.amount_cents, r.currency, r.interval, r.interval_count,
+       r.next_date::text, r.method, r.description, r.active
+     FROM recurring_payments r LEFT JOIN clients c ON c.id = r.client_id ${clientId ? 'WHERE r.client_id = $1' : ''}
+     ORDER BY r.active DESC, r.next_date`,
+    clientId ? [clientId] : [],
+  );
 }
