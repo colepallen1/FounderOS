@@ -106,3 +106,30 @@ export async function upsertClientByName(c: NewClient): Promise<{ slug: string; 
   );
   return { slug, created: true };
 }
+
+/**
+ * Merge clients linked to the same Stripe customers (left by the double-encoding bug).
+ * Keeps the oldest, moves tasks / objectives / payments / schedules / notes onto it, deletes the rest.
+ */
+export async function dedupeClients(): Promise<number> {
+  const groups = await q<{ ids: string[] }>(
+    `SELECT array_agg(id ORDER BY created_at, id) AS ids FROM clients
+     WHERE jsonb_typeof(stripe_customer_ids) = 'array' AND jsonb_array_length(stripe_customer_ids) > 0
+     GROUP BY stripe_customer_ids HAVING count(*) > 1`,
+  );
+  let removed = 0;
+  for (const g of groups) {
+    const [keep, ...drop] = g.ids;
+    for (const table of ['tasks', 'recurring_tasks', 'objectives', 'payments', 'recurring_payments', 'calendar_events']) {
+      await q(`UPDATE ${table} SET client_id = $1 WHERE client_id = ANY($2::text[])`, [keep, drop]);
+    }
+    await q(
+      `UPDATE clients k SET notes = trim(both E'\\n' from k.notes || E'\\n' || coalesce((SELECT string_agg(notes, E'\\n') FROM clients WHERE id = ANY($2::text[]) AND notes <> ''), ''))
+       WHERE k.id = $1`,
+      [keep, drop],
+    );
+    await q(`DELETE FROM clients WHERE id = ANY($1::text[])`, [drop]);
+    removed += drop.length;
+  }
+  return removed;
+}

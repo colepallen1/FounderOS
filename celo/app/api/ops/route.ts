@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
-import { importStripeClients, upsertClientByName } from '@/lib/clients';
+import { dedupeClients, importStripeClients, upsertClientByName } from '@/lib/clients';
 import { runSync } from '@/lib/sync';
+import { q } from '@/lib/db';
 import { CLIENT_STATUSES } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -15,6 +16,8 @@ export const maxDuration = 60;
 const Body = z.discriminatedUnion('action', [
   z.object({ action: z.literal('sync') }),
   z.object({ action: z.literal('import_stripe_clients') }),
+  z.object({ action: z.literal('dedupe_clients') }),
+  z.object({ action: z.literal('list_clients') }),
   z.object({
     action: z.literal('upsert_client'),
     name: z.string().min(1).max(200),
@@ -42,6 +45,12 @@ export async function POST(req: Request) {
     let result: unknown;
     if (b.action === 'sync') result = await runSync();
     else if (b.action === 'import_stripe_clients') result = { imported: await importStripeClients() };
+    else if (b.action === 'dedupe_clients') result = { removed: await dedupeClients() };
+    else if (b.action === 'list_clients') {
+      result = await q(
+        `SELECT name, status, retainer_cents, jsonb_typeof(stripe_customer_ids) AS ids_type, stripe_customer_ids FROM clients ORDER BY name`,
+      );
+    }
     else {
       const { action: _a, ...client } = b;
       result = await upsertClientByName(client);

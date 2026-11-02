@@ -38,14 +38,26 @@ async function open(): Promise<Engine> {
     const sql = postgres(url, {
       ssl: /localhost|127\.0\.0\.1/.test(url) ? false : 'require',
       prepare: false, // Neon's pooler and pgbouncer don't support prepared statements
-      max: 3,
+      max: Number(process.env.CELO_DB_POOL_MAX ?? 3),
       idle_timeout: 20,
-      types: { bigint: postgres.BigInt },
+      types: {
+        bigint: postgres.BigInt,
+        // We hand JSON columns ready-made JSON text. postgres.js would JSON.stringify it again
+        // and store a JSON *string* ("[...]") instead of the array, so pass strings through.
+        json: {
+          to: 114,
+          from: [114, 3802],
+          serialize: (x: unknown) => (typeof x === 'string' ? x : JSON.stringify(x)),
+          parse: (x: string) => JSON.parse(x),
+        },
+      },
     });
     const engine: Engine = {
       query: async (text, params) => (await sql.unsafe(text, params as never[])) as unknown as Row[],
     };
-    await sql.unsafe(SCHEMA);
+    // Several server instances can boot at once after a deploy; take turns creating tables.
+    // The simple-query protocol runs this whole string as one transaction, so the lock spans it.
+    await sql.unsafe(`SELECT pg_advisory_xact_lock(724203); ${SCHEMA}`);
     return engine;
   }
   if (process.env.VERCEL) {
