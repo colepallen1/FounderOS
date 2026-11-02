@@ -2,7 +2,7 @@ import 'server-only';
 import { q, one, newId } from './db';
 import { getSecret } from './settings';
 import { syncStripe } from './integrations/stripe';
-import { importStripeClients } from './clients';
+import { dedupeClients, importStripeClients } from './clients';
 import { syncCalendar, syncGmail, syncGoogleAds } from './integrations/google';
 import { syncMeta } from './integrations/meta';
 import { dueOccurrences, duePayments, toDay, type Cadence, type PayCadence } from './recurring';
@@ -15,6 +15,7 @@ export const SOURCES: { id: SourceId; label: string; run: () => Promise<string> 
     label: 'Stripe',
     run: async () => {
       const msg = await syncStripe();
+      await dedupeClients();
       const added = await importStripeClients();
       return added ? `${msg}, ${added} new client${added === 1 ? '' : 's'}` : msg;
     },

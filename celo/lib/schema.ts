@@ -157,6 +157,13 @@ CREATE TABLE IF NOT EXISTS recurring_payments (
 
 ALTER TABLE payments ADD COLUMN IF NOT EXISTS recurring_id TEXT;
 
+-- Repair (2026-11-02): JSON arrays once stored double-encoded as JSON strings.
+UPDATE clients SET stripe_customer_ids = (stripe_customer_ids #>> '{}')::jsonb WHERE jsonb_typeof(stripe_customer_ids) = 'string';
+UPDATE clients SET email_domains = (email_domains #>> '{}')::jsonb WHERE jsonb_typeof(email_domains) = 'string';
+UPDATE clients SET services = (services #>> '{}')::jsonb WHERE jsonb_typeof(services) = 'string';
+UPDATE subscriptions SET items = (items #>> '{}')::jsonb WHERE jsonb_typeof(items) = 'string';
+UPDATE calendar_events SET attendees = (attendees #>> '{}')::jsonb WHERE jsonb_typeof(attendees) = 'string';
+
 CREATE TABLE IF NOT EXISTS sync_runs (
   source TEXT PRIMARY KEY,
   last_started_at TIMESTAMPTZ,
