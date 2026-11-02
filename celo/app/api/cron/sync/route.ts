@@ -13,5 +13,10 @@ export async function GET(req: Request) {
   if (!secret || req.headers.get('authorization') !== `Bearer ${secret}`) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
-  return NextResponse.json(await runSync());
+  try {
+    return NextResponse.json(await runSync());
+  } catch (err) {
+    // Caller holds CRON_SECRET, so the real reason is safe to show and saves a trip to the logs.
+    return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
+  }
 }
