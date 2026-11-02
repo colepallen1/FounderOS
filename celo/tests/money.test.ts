@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { countsTowardMrr, formatMoney, itemsMrrCents, monthSeries, parseAmountToCents, pctChange } from '@/lib/money';
+import { billingLabel, countsTowardMrr, formatMoney, itemsMrrCents, monthSeries, parseAmountToCents, pctChange } from '@/lib/money';
 
 const price = (unit_amount: number, interval: 'day' | 'week' | 'month' | 'year', interval_count = 1) => ({ unit_amount, recurring: { interval, interval_count } });
 
@@ -24,6 +24,14 @@ describe('Celo Digital live book (2026-11-02)', () => {
     const total = subs.reduce((s, p) => s + itemsMrrCents([{ price: p }]), 0);
     expect(total).toBe(969833);
     expect(itemsMrrCents([{ price: price(258000, 'week', 2) }])).toBe(559000);
+  });
+});
+
+describe('billingLabel', () => {
+  it('says how a client is actually billed', () => {
+    expect(billingLabel([{ amount_cents: 258000, interval: 'week', interval_count: 2 }])).toBe('$2,580 every 2 weeks');
+    expect(billingLabel([{ amount_cents: 175000, interval: 'month', interval_count: 1 }])).toBe('$1,750 / month');
+    expect(billingLabel([{ amount_cents: 7550, interval: 'week', interval_count: 1 }])).toBe('$75.50 / week');
   });
 });
 

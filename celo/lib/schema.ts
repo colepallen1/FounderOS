@@ -135,6 +135,28 @@ CREATE TABLE IF NOT EXISTS settings (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Billing detail for the revenue forecast (added 2026-11-02).
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS items JSONB NOT NULL DEFAULT '[]';
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS trial_end TIMESTAMPTZ;
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS cancel_at TIMESTAMPTZ;
+
+-- Off-Stripe payments that repeat (ACH, wire...). Each due date logs a payment (added 2026-11-02).
+CREATE TABLE IF NOT EXISTS recurring_payments (
+  id TEXT PRIMARY KEY,
+  client_id TEXT REFERENCES clients(id) ON DELETE CASCADE,
+  amount_cents INTEGER NOT NULL,
+  currency TEXT NOT NULL DEFAULT 'usd',
+  interval TEXT NOT NULL,
+  interval_count INTEGER NOT NULL DEFAULT 1,
+  next_date DATE NOT NULL,
+  method TEXT NOT NULL DEFAULT '',
+  description TEXT NOT NULL DEFAULT '',
+  active BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS recurring_id TEXT;
+
 CREATE TABLE IF NOT EXISTS sync_runs (
   source TEXT PRIMARY KEY,
   last_started_at TIMESTAMPTZ,

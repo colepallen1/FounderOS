@@ -82,6 +82,7 @@ export type Subscription = {
   current_period_end: string | null;
   cancel_at_period_end: boolean;
   description: string;
+  items: { amount_cents: number; interval: string; interval_count: number }[];
 };
 
 export type Recurring = { id: string; client_id: string | null; client_name: string | null; title: string; cadence: 'weekly' | 'monthly'; anchor: number; priority: number; active: boolean };

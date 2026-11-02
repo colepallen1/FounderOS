@@ -8,11 +8,12 @@ import { NotesEditor } from '@/components/NotesEditor';
 import { Objectives } from '@/components/Objectives';
 import { ManualPaymentForm, PaymentsTable } from '@/components/Payments';
 import { RecurringManager } from '@/components/Recurring';
+import { RecurringPayments } from '@/components/RecurringPayments';
 import { TaskChecklist } from '@/components/TaskChecklist';
 import { Badge, Empty, NotConfigured, PageHeader, Panel, STATUS_TONE, Stat, Tabs } from '@/components/ui';
 import { fmtAgo, fmtDate, fmtNum, fmtTime } from '@/components/format';
 import { deleteClient, setStripeLinks, updateClient } from '@/lib/actions';
-import { formatMoney } from '@/lib/money';
+import { billingLabel, formatMoney } from '@/lib/money';
 import {
   adDaily,
   adTotals,
@@ -23,6 +24,7 @@ import {
   getClientBySlug,
   listObjectives,
   listPayments,
+  listRecurringPayments,
   listRecurring,
   listSubscriptions,
   listTasks,
@@ -193,10 +195,11 @@ async function WorkTab({ c, tasks, fixed }: { c: ClientSummary; tasks: Awaited<R
 }
 
 async function RevenueTab({ c, fixed, stripeOn }: { c: ClientSummary; fixed: { id: string; slug: string }; stripeOn: boolean }) {
-  const [series, payments, subs] = await Promise.all([
+  const [series, payments, subs, schedules] = await Promise.all([
     clientMonthSeries(c.id),
     listPayments({ clientId: c.id, limit: 200 }),
     c.stripe_customer_ids.length ? listSubscriptions({ clientCustomerIds: c.stripe_customer_ids }) : Promise.resolve([]),
+    listRecurringPayments(c.id),
   ]);
   return (
     <div className="space-y-4">
@@ -226,7 +229,8 @@ async function RevenueTab({ c, fixed, stripeOn }: { c: ClientSummary; fixed: { i
                   <th>Plan</th>
                   <th>Status</th>
                   <th>Renews</th>
-                  <th className="text-right">MRR</th>
+                  <th>Billing</th>
+                  <th className="text-right">Per month</th>
                 </tr>
               </thead>
               <tbody>
@@ -240,7 +244,8 @@ async function RevenueTab({ c, fixed, stripeOn }: { c: ClientSummary; fixed: { i
                       </div>
                     </td>
                     <td className="text-muted">{fmtDate(s.current_period_end)}</td>
-                    <td className="num text-right text-[15px]">{formatMoney(s.mrr_cents, s.currency)}</td>
+                    <td className="whitespace-nowrap text-muted">{s.items?.length ? billingLabel(s.items, s.currency) : '-'}</td>
+                    <td className="num text-right text-[15px]">{s.status === 'trialing' ? <span className="text-faint">from {fmtDate(s.current_period_end)}</span> : formatMoney(s.mrr_cents, s.currency)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -252,6 +257,12 @@ async function RevenueTab({ c, fixed, stripeOn }: { c: ClientSummary; fixed: { i
       </Panel>
       <Panel title="Log an off-Stripe payment" icon="plus">
         <ManualPaymentForm clients={[]} fixedClient={fixed} />
+        {schedules.length > 0 && (
+          <div className="mt-6 border-t border-line/60 pt-4">
+            <div className="eyebrow mb-1">Recurring</div>
+            <RecurringPayments items={schedules} showClient={false} />
+          </div>
+        )}
       </Panel>
       <Panel title="Payment history" icon="money" pad={false}>
         <div className={payments.length ? '' : 'p-5'}>

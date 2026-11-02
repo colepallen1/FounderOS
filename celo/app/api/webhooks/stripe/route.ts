@@ -3,6 +3,8 @@ import type Stripe from 'stripe';
 import { getSecret } from '@/lib/settings';
 import { q } from '@/lib/db';
 import { relinkPayments, stripeClient, upsertCharge, upsertCustomer, upsertSubscription } from '@/lib/integrations/stripe';
+import { importStripeClients } from '@/lib/clients';
+import { revalidatePath } from 'next/cache';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,7 +47,15 @@ export async function POST(req: Request) {
       break;
     }
   }
+  // A new paying customer becomes a client card straight away (needs their customer row, so sync it first).
+  if (obj.object === 'subscription') {
+    const sub = obj as unknown as { customer?: string | { id: string } };
+    const cus = typeof sub.customer === 'string' ? sub.customer : sub.customer?.id;
+    if (cus) await upsertCustomer(await stripe.customers.retrieve(cus));
+    await importStripeClients();
+  }
   await relinkPayments();
+  revalidatePath('/', 'layout');
   await q(`INSERT INTO sync_runs (source, last_ok_at, ok, message) VALUES ('stripe_webhook', now(), true, $1)
            ON CONFLICT (source) DO UPDATE SET last_ok_at = now(), ok = true, message = EXCLUDED.message`, [event.type]);
   return NextResponse.json({ received: true });

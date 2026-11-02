@@ -3,8 +3,10 @@ import { ManualPaymentForm, PaymentsTable } from '@/components/Payments';
 import { ImportStripeButton } from '@/components/ImportStripeButton';
 import { Badge, Empty, NotConfigured, PageHeader, Panel, STATUS_TONE, Stat } from '@/components/ui';
 import { fmtDate } from '@/components/format';
-import { formatMoney } from '@/lib/money';
-import { clientOptions, listPayments, listSubscriptions, moneySummary, stripeCustomers } from '@/lib/queries';
+import { billingLabel, formatMoney } from '@/lib/money';
+import { clientOptions, forecast, listRecurringPayments, listPayments, listSubscriptions, moneySummary, stripeCustomers } from '@/lib/queries';
+import { ForecastPanel } from '@/components/ForecastPanel';
+import { RecurringPayments } from '@/components/RecurringPayments';
 import { configured } from '@/lib/sync';
 
 export const metadata = { title: 'Money' };
@@ -19,12 +21,14 @@ const FILTERS = [
 
 export default async function Money({ searchParams }: { searchParams: { status?: string } }) {
   const status = FILTERS.some((f) => f.id === searchParams.status) ? searchParams.status : '';
-  const [money, payments, subs, clients, conn] = await Promise.all([
+  const [money, payments, subs, clients, conn, f, schedules] = await Promise.all([
     moneySummary(),
     listPayments({ status: status || undefined, limit: 250 }),
     listSubscriptions({ live: true }),
     clientOptions(),
     configured(),
+    forecast(),
+    listRecurringPayments(),
   ]);
   const customers = conn.stripe ? await stripeCustomers() : [];
   const unlinkedPaying = customers.filter((c) => !c.linked_to && subs.some((s) => s.stripe_customer_id === c.id));
@@ -39,8 +43,18 @@ export default async function Money({ searchParams }: { searchParams: { status?:
         <Stat label="Past due" value={money.pastDue} tone={money.pastDue ? 'bad' : undefined} sub={`${money.failed30d} failed charge${money.failed30d === 1 ? '' : 's'} in 30 days`} />
       </div>
 
+      <div className="mt-4">
+        <ForecastPanel f={f} currency={cur} />
+      </div>
+
       <Panel title="Log an off-Stripe payment" icon="plus" className="mt-4">
         <ManualPaymentForm clients={clients} />
+        {schedules.length > 0 && (
+          <div className="mt-6 border-t border-line/60 pt-4">
+            <div className="eyebrow mb-1">Recurring off-Stripe payments</div>
+            <RecurringPayments items={schedules} />
+          </div>
+        )}
       </Panel>
 
       {unlinkedPaying.length > 0 && (
@@ -68,7 +82,8 @@ export default async function Money({ searchParams }: { searchParams: { status?:
                   <th className="hidden sm:table-cell">Plan</th>
                   <th>Status</th>
                   <th>Renews</th>
-                  <th className="text-right">MRR</th>
+                  <th>Billing</th>
+                  <th className="text-right">Per month</th>
                 </tr>
               </thead>
               <tbody>
@@ -91,7 +106,8 @@ export default async function Money({ searchParams }: { searchParams: { status?:
                       </div>
                     </td>
                     <td className="whitespace-nowrap text-muted">{fmtDate(s.current_period_end)}</td>
-                    <td className="num text-right text-[15px]">{formatMoney(s.mrr_cents, s.currency)}</td>
+                    <td className="whitespace-nowrap text-muted">{s.items?.length ? billingLabel(s.items, s.currency) : '-'}</td>
+                    <td className="num text-right text-[15px]">{s.status === 'trialing' ? <span className="text-faint">from {fmtDate(s.current_period_end)}</span> : formatMoney(s.mrr_cents, s.currency)}</td>
                   </tr>
                 ))}
               </tbody>

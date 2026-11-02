@@ -10,7 +10,9 @@ import { parseAmountToCents } from './money';
 import { parseDomains, slugify } from './slug';
 import { setSecret, setSetting, SECRET_KEYS, type SecretKey } from './settings';
 import { ensureWebhook, relinkPayments } from './integrations/stripe';
-import { materializeRecurring, runSync, type SourceId } from './sync';
+import { ignoreCustomers, importStripeClients as importClientsFromStripe, uniqueSlug } from './clients';
+import { materializeRecurring, materializeRecurringPayments, runSync, type SourceId } from './sync';
+import { PAY_CADENCES } from './recurring';
 import { CLIENT_STATUSES, TASK_STATUS_IDS } from './types';
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? '').trim();
@@ -23,14 +25,6 @@ function refresh(slug?: string | null) {
 
 // ── Clients ────────────────────────────────────────────────────────────────
 
-async function uniqueSlug(name: string, exceptId?: string): Promise<string> {
-  const base = slugify(name);
-  for (let i = 0; ; i++) {
-    const slug = i ? `${base}-${i + 1}` : base;
-    const hit = await one<{ id: string }>(`SELECT id FROM clients WHERE slug = $1`, [slug]);
-    if (!hit || hit.id === exceptId) return slug;
-  }
-}
 
 export async function createClient(form: FormData) {
   const name = str(form, 'name');
@@ -105,34 +99,18 @@ export async function setStripeLinks(form: FormData) {
   refresh(c?.slug);
 }
 
-/**
- * One click: every Stripe customer with a live subscription who is not on any
- * client yet becomes an active client, already linked. Safe to run repeatedly.
- */
 export async function importStripeClients() {
-  const rows = await q<{ id: string; name: string; email: string; mrr: number }>(
-    `SELECT sc.id, sc.name, sc.email, COALESCE(sum(s.mrr_cents), 0)::int AS mrr
-     FROM stripe_customers sc JOIN subscriptions s ON s.stripe_customer_id = sc.id
-     WHERE s.status IN ('active','past_due','paused')
-       AND NOT EXISTS (SELECT 1 FROM clients c WHERE c.stripe_customer_ids @> to_jsonb(sc.id))
-     GROUP BY sc.id, sc.name, sc.email`,
-  );
-  for (const r of rows) {
-    const name = r.name || r.email.split('@')[0] || r.id;
-    await q(
-      `INSERT INTO clients (id, slug, name, status, contact_email, email_domains, stripe_customer_ids, start_date)
-       VALUES ($1,$2,$3,'active',$4,$5,$6,(SELECT min(paid_at)::date FROM payments WHERE stripe_customer_id = $7 AND status = 'paid'))`,
-      [newId('cli'), await uniqueSlug(name), name, r.email.toLowerCase(), JSON.stringify(parseDomains(r.email)), JSON.stringify([r.id]), r.id],
-    );
-  }
-  await relinkPayments();
+  const n = await importClientsFromStripe();
   refresh();
-  return rows.length;
+  return n;
 }
 
 export async function deleteClient(form: FormData) {
   const id = str(form, 'id');
   if (str(form, 'confirm') !== 'DELETE') return;
+  // Remember its Stripe customers so the next sync does not bring the client back.
+  const c = await one<{ ids: string[] }>(`SELECT stripe_customer_ids AS ids FROM clients WHERE id = $1`, [id]);
+  await ignoreCustomers(c?.ids ?? []);
   await q(`DELETE FROM clients WHERE id = $1`, [id]);
   refresh();
   redirect('/clients');
@@ -258,12 +236,40 @@ export async function addManualPayment(form: FormData) {
   const cents = parseAmountToCents(str(form, 'amount'));
   const date = dateOrNull(str(form, 'paid_at'));
   if (!cents || !date) return;
-  await q(
-    `INSERT INTO payments (id, source, client_id, amount_cents, currency, status, method, description, paid_at)
-     VALUES ($1,'manual',$2,$3,$4,'paid',$5,$6,$7)`,
-    [newId('man'), str(form, 'client_id') || null, cents, (str(form, 'currency') || 'usd').toLowerCase(), str(form, 'method'), str(form, 'description'), `${date}T12:00:00Z`],
-  );
+  const clientId = str(form, 'client_id') || null;
+  const currency = (str(form, 'currency') || 'usd').toLowerCase();
+  const repeats = str(form, 'repeats');
+  const cadence = PAY_CADENCES[repeats];
+  if (!cadence) {
+    await q(
+      `INSERT INTO payments (id, source, client_id, amount_cents, currency, status, method, description, paid_at)
+       VALUES ($1,'manual',$2,$3,$4,'paid',$5,$6,$7)`,
+      [newId('man'), clientId, cents, currency, str(form, 'method'), str(form, 'description'), `${date}T12:00:00Z`],
+    );
+  } else {
+    // A schedule: the first date logs now if it has come, later ones log themselves on the day.
+    await q(
+      `INSERT INTO recurring_payments (id, client_id, amount_cents, currency, interval, interval_count, next_date, method, description)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      [newId('rpy'), clientId, cents, currency, cadence.interval, cadence.interval_count, date, str(form, 'method'), str(form, 'description')],
+    );
+    // Keep the client's monthly retainer in step, so MRR and the forecast count it once.
+    if (clientId) {
+      await q(`UPDATE clients SET retainer_cents = $2 WHERE id = $1 AND jsonb_array_length(stripe_customer_ids) = 0`, [clientId, Math.round(cents * cadence.perMonth)]);
+    }
+    await materializeRecurringPayments();
+  }
   refresh(str(form, 'client_slug'));
+}
+
+export async function setRecurringPaymentActive(id: string, active: boolean) {
+  await q(`UPDATE recurring_payments SET active = $2 WHERE id = $1`, [id, active]);
+  revalidatePath('/', 'layout');
+}
+
+export async function deleteRecurringPayment(id: string) {
+  await q(`DELETE FROM recurring_payments WHERE id = $1`, [id]);
+  revalidatePath('/', 'layout');
 }
 
 export async function deleteManualPayment(id: string) {

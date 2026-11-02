@@ -50,12 +50,21 @@ export async function upsertSubscription(s: Stripe.Subscription, productNames?: 
     })
     .filter(Boolean)
     .join(', ');
+  const billing = items
+    .map((it) => {
+      const r = it.price.recurring;
+      const end = (it as unknown as { current_period_end?: number }).current_period_end;
+      if (!r || it.price.unit_amount == null) return null;
+      return { amount_cents: it.price.unit_amount * (it.quantity ?? 1), interval: r.interval, interval_count: r.interval_count, period_end: end ? new Date(end * 1000).toISOString() : null };
+    })
+    .filter(Boolean);
   await q(
-    `INSERT INTO subscriptions (id, stripe_customer_id, status, mrr_cents, currency, current_period_end, cancel_at_period_end, description, synced_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,now())
+    `INSERT INTO subscriptions (id, stripe_customer_id, status, mrr_cents, currency, current_period_end, cancel_at_period_end, description, items, trial_end, cancel_at, synced_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,now())
      ON CONFLICT (id) DO UPDATE SET stripe_customer_id = EXCLUDED.stripe_customer_id, status = EXCLUDED.status,
        mrr_cents = EXCLUDED.mrr_cents, currency = EXCLUDED.currency, current_period_end = EXCLUDED.current_period_end,
-       cancel_at_period_end = EXCLUDED.cancel_at_period_end, description = EXCLUDED.description, synced_at = now()`,
+       cancel_at_period_end = EXCLUDED.cancel_at_period_end, description = EXCLUDED.description, items = EXCLUDED.items,
+       trial_end = EXCLUDED.trial_end, cancel_at = EXCLUDED.cancel_at, synced_at = now()`,
     [
       s.id,
       customerId(s.customer),
@@ -63,8 +72,11 @@ export async function upsertSubscription(s: Stripe.Subscription, productNames?: 
       mrr,
       s.currency,
       periodEnd ? new Date(periodEnd * 1000).toISOString() : null,
-      Boolean(s.cancel_at_period_end || s.cancel_at),
+      Boolean(s.cancel_at_period_end),
       description,
+      JSON.stringify(billing),
+      s.trial_end ? new Date(s.trial_end * 1000).toISOString() : null,
+      s.cancel_at ? new Date(s.cancel_at * 1000).toISOString() : null,
     ],
   );
 }

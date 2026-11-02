@@ -2,14 +2,23 @@ import 'server-only';
 import { q, one, newId } from './db';
 import { getSecret } from './settings';
 import { syncStripe } from './integrations/stripe';
+import { importStripeClients } from './clients';
 import { syncCalendar, syncGmail, syncGoogleAds } from './integrations/google';
 import { syncMeta } from './integrations/meta';
-import { dueOccurrences, toDay, type Cadence } from './recurring';
+import { dueOccurrences, duePayments, toDay, type Cadence, type PayCadence } from './recurring';
 
 export type SourceId = 'stripe' | 'calendar' | 'gmail' | 'meta' | 'google_ads';
 
 export const SOURCES: { id: SourceId; label: string; run: () => Promise<string> }[] = [
-  { id: 'stripe', label: 'Stripe', run: syncStripe },
+  {
+    id: 'stripe',
+    label: 'Stripe',
+    run: async () => {
+      const msg = await syncStripe();
+      const added = await importStripeClients();
+      return added ? `${msg}, ${added} new client${added === 1 ? '' : 's'}` : msg;
+    },
+  },
   { id: 'calendar', label: 'Google Calendar', run: syncCalendar },
   { id: 'gmail', label: 'Gmail', run: syncGmail },
   { id: 'meta', label: 'Meta Ads', run: syncMeta },
@@ -61,6 +70,7 @@ export async function runSync(only?: SourceId[]): Promise<Record<string, string>
     }
   }
   out.recurring = `${await materializeRecurring()} tasks created`;
+  out.recurring_payments = `${await materializeRecurringPayments()} payments logged`;
   return out;
 }
 
@@ -101,4 +111,31 @@ export async function materializeRecurring(today = toDay(new Date())): Promise<n
     }
   }
   return created;
+}
+
+/** Log each recurring off-Stripe payment whose date has come. Idempotent (claims the schedule first). */
+export async function materializeRecurringPayments(today = toDay(new Date())): Promise<number> {
+  const rows = await q<{ id: string; client_id: string | null; amount_cents: number; currency: string; interval: PayCadence['interval']; interval_count: number; next: string; method: string; description: string; anchor: number }>(
+    `SELECT id, client_id, amount_cents, currency, interval, interval_count, next_date::text AS next, method, description,
+       COALESCE(EXTRACT(DAY FROM (SELECT min(paid_at) FROM payments WHERE recurring_id = r.id)), EXTRACT(DAY FROM r.next_date))::int AS anchor
+     FROM recurring_payments r WHERE active AND next_date <= $1::date`,
+    [today],
+  );
+  let logged = 0;
+  for (const r of rows) {
+    const anchor = r.anchor || Number(r.next.slice(8));
+    const { due, next } = duePayments(r.next, today, { interval: r.interval, interval_count: r.interval_count }, anchor);
+    if (!due.length) continue;
+    const claimed = await q(`UPDATE recurring_payments SET next_date = $2 WHERE id = $1 AND next_date = $3::date RETURNING id`, [r.id, next, r.next]);
+    if (!claimed.length) continue;
+    for (const day of due) {
+      await q(
+        `INSERT INTO payments (id, source, client_id, amount_cents, currency, status, method, description, paid_at, recurring_id)
+         VALUES ($1,'manual',$2,$3,$4,'paid',$5,$6,$7,$8)`,
+        [newId('man'), r.client_id, r.amount_cents, r.currency, r.method, r.description || 'Recurring payment', `${day}T12:00:00Z`, r.id],
+      );
+      logged++;
+    }
+  }
+  return logged;
 }

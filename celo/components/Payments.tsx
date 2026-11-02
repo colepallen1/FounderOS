@@ -62,7 +62,7 @@ export function PaymentsTable({ payments, showClient = true }: { payments: Payme
 export function ManualPaymentForm({ clients, fixedClient }: { clients: { id: string; name: string }[]; fixedClient?: { id: string; slug: string } }) {
   const today = new Date().toISOString().slice(0, 10);
   return (
-    <form action={addManualPayment} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_1fr_auto] lg:items-end">
+    <form action={addManualPayment} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_1fr_1fr_auto] lg:items-end">
       {fixedClient && <input type="hidden" name="client_id" value={fixedClient.id} />}
       {fixedClient && <input type="hidden" name="client_slug" value={fixedClient.slug} />}
       <div>
@@ -70,8 +70,17 @@ export function ManualPaymentForm({ clients, fixedClient }: { clients: { id: str
         <input name="amount" required inputMode="decimal" placeholder="2500" className="field" />
       </div>
       <div>
-        <label className="label">Received</label>
+        <label className="label">Date</label>
         <input name="paid_at" type="date" required defaultValue={today} className="field" />
+      </div>
+      <div>
+        <label className="label">Repeats</label>
+        <select name="repeats" className="field" defaultValue="">
+          <option value="">One time</option>
+          <option value="weekly">Weekly</option>
+          <option value="biweekly">Every 2 weeks</option>
+          <option value="monthly">Monthly</option>
+        </select>
       </div>
       <div>
         <label className="label">Method</label>
@@ -100,12 +109,12 @@ export function ManualPaymentForm({ clients, fixedClient }: { clients: { id: str
         </div>
       )}
       {!fixedClient && (
-        <div className="sm:col-span-2 lg:col-span-4">
+        <div className="sm:col-span-2 lg:col-span-5">
           <label className="label">Note</label>
           <input name="description" placeholder="November retainer" className="field" />
         </div>
       )}
-      <button className="btn justify-center lg:row-start-1 lg:col-start-5">
+      <button className="btn justify-center lg:row-start-1 lg:col-start-6">
         <Icon name="plus" size={14} /> Log payment
       </button>
     </form>
