@@ -1,7 +1,7 @@
 import { CLIENT_STATUSES, SERVICES, type Client } from '@/lib/types';
 
 /** Profile fields shared by the create and edit forms (server rendered). */
-export function ClientFields({ c, full }: { c?: Partial<Client>; full?: boolean }) {
+export function ClientFields({ c, full, partners = [] }: { c?: Partial<Client>; full?: boolean; partners?: { id: string; name: string }[] }) {
   const services = new Set(c?.services ?? []);
   return (
     <div className="grid gap-5 sm:grid-cols-2">
@@ -25,7 +25,7 @@ export function ClientFields({ c, full }: { c?: Partial<Client>; full?: boolean 
       </div>
       <div>
         <label className="label" htmlFor="retainer">
-          Monthly retainer (USD)
+          {c?.parent_id ? 'Monthly fee (USD)' : 'Monthly retainer (USD)'}
         </label>
         <input id="retainer" name="retainer" inputMode="decimal" defaultValue={c?.retainer_cents ? (c.retainer_cents / 100).toString() : ''} className="field" placeholder="3500" />
         <p className="mt-1.5 text-[11.5px] text-faint">Used for clients not billed through Stripe. Linked Stripe subscriptions override it.</p>
@@ -86,6 +86,29 @@ export function ClientFields({ c, full }: { c?: Partial<Client>; full?: boolean 
             </label>
             <input id="meta_ad_account_id" name="meta_ad_account_id" defaultValue={c?.meta_ad_account_id} className="field" placeholder="act_1234567890" />
           </div>
+          <div>
+            <label className="label" htmlFor="parent_id">
+              Billed through
+            </label>
+            <select id="parent_id" name="parent_id" defaultValue={c?.parent_id ?? ''} className="field">
+              <option value="">Bills Celo directly</option>
+              {partners
+                .filter((p) => p.id !== c?.id)
+                .map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+            </select>
+            <p className="mt-1.5 text-[11.5px] text-faint">For a partner's client: its fee is shown, but revenue counts once, on the partner.</p>
+          </div>
+          <label className="flex cursor-pointer items-start gap-2.5 self-center text-[13px]">
+            <input type="checkbox" name="is_partner" defaultChecked={c?.is_partner} className="mt-0.5 accent-[rgb(var(--accent))]" />
+            <span>
+              Partner with its own clients
+              <span className="block text-[11.5px] text-faint">e.g. an agency that pays you to run ads for its clients</span>
+            </span>
+          </label>
           <div>
             <label className="label" htmlFor="google_ads_customer_id">
               Google Ads customer ID

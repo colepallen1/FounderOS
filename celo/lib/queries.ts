@@ -13,7 +13,7 @@ export function todayInTz(): string {
 }
 
 const CLIENT_COLS = `id, slug, name, status, services, retainer_cents, start_date::text, renewal_date::text, contact_name, contact_email,
-  website, email_domains, stripe_customer_ids, meta_ad_account_id, google_ads_customer_id, notes`;
+  website, email_domains, stripe_customer_ids, meta_ad_account_id, google_ads_customer_id, notes, is_partner, parent_id`;
 
 const TASK_SELECT = `SELECT t.id, t.client_id, c.name AS client_name, c.slug AS client_slug, t.title, t.notes, t.status, t.priority,
   t.due_date::text, t.recurring_id, t.position FROM tasks t LEFT JOIN clients c ON c.id = t.client_id`;
@@ -34,13 +34,19 @@ const SUB_SELECT = `SELECT s.id, s.stripe_customer_id, COALESCE(NULLIF(sc.name, 
 export type ClientSummary = Client & {
   stripe_mrr_cents: number;
   mrr_cents: number;
-  mrr_source: 'stripe' | 'manual' | 'none';
+  mrr_source: 'stripe' | 'manual' | 'none' | 'parent';
   open_tasks: number;
   overdue_tasks: number;
   past_due: boolean;
   ltv_cents: number;
   last_paid_at: string | null;
   ad_spend_30d_cents: number;
+  ad_conv_30d: number;
+  ad_value_30d_cents: number;
+  parent_name: string | null;
+  parent_slug: string | null;
+  sub_count: number;
+  sub_fees_cents: number;
 };
 
 /** MRR per client: Stripe subscriptions on linked customers if any; otherwise the manual retainer amount. */
@@ -50,8 +56,11 @@ export async function listClients(): Promise<ClientSummary[]> {
     `SELECT ${CLIENT_COLS.split(',').map((c) => `c.${c.trim()}`).join(', ')},
       COALESCE(sub.mrr, 0)::int AS stripe_mrr_cents,
       COALESCE(sub.past_due, false) AS past_due,
-      CASE WHEN jsonb_array_length(c.stripe_customer_ids) > 0 THEN COALESCE(sub.mrr, 0) ELSE c.retainer_cents END::int AS mrr_cents,
-      CASE WHEN jsonb_array_length(c.stripe_customer_ids) > 0 THEN 'stripe' WHEN c.retainer_cents > 0 THEN 'manual' ELSE 'none' END AS mrr_source,
+      CASE WHEN c.parent_id IS NOT NULL THEN 0 WHEN jsonb_array_length(c.stripe_customer_ids) > 0 THEN COALESCE(sub.mrr, 0) ELSE c.retainer_cents END::int AS mrr_cents,
+      CASE WHEN c.parent_id IS NOT NULL THEN 'parent' WHEN jsonb_array_length(c.stripe_customer_ids) > 0 THEN 'stripe' WHEN c.retainer_cents > 0 THEN 'manual' ELSE 'none' END AS mrr_source,
+      par.name AS parent_name, par.slug AS parent_slug,
+      COALESCE(kids.n, 0)::int AS sub_count, COALESCE(kids.fees, 0)::int AS sub_fees_cents,
+      COALESCE(a.conv, 0)::float AS ad_conv_30d, COALESCE(a.val, 0)::int AS ad_value_30d_cents,
       COALESCE(t.open, 0)::int AS open_tasks, COALESCE(t.overdue, 0)::int AS overdue_tasks,
       COALESCE(p.ltv, 0)::int AS ltv_cents, p.last_paid::text AS last_paid_at,
       COALESCE(a.spend, 0)::int AS ad_spend_30d_cents
@@ -62,7 +71,9 @@ export async function listClients(): Promise<ClientSummary[]> {
       count(*) FILTER (WHERE status <> 'done' AND due_date < $1::date) AS overdue FROM tasks WHERE client_id = c.id) t ON true
     LEFT JOIN LATERAL (SELECT sum(amount_cents - refunded_cents) FILTER (WHERE status IN ('paid','refunded')) AS ltv,
       max(paid_at) FILTER (WHERE status = 'paid') AS last_paid FROM payments WHERE client_id = c.id) p ON true
-    LEFT JOIN LATERAL (SELECT sum(spend_cents) AS spend FROM ad_metrics WHERE client_id = c.id AND day > $1::date - 30) a ON true
+    LEFT JOIN LATERAL (SELECT sum(spend_cents) AS spend, sum(conversions) AS conv, sum(conversion_value_cents) AS val FROM ad_metrics WHERE client_id = c.id AND day > $1::date - 30) a ON true
+    LEFT JOIN clients par ON par.id = c.parent_id
+    LEFT JOIN LATERAL (SELECT count(*) AS n, sum(retainer_cents) FILTER (WHERE status IN ('active','onboarding')) AS fees FROM clients k WHERE k.parent_id = c.id AND k.status <> 'churned') kids ON true
     ORDER BY CASE c.status WHEN 'active' THEN 0 WHEN 'onboarding' THEN 1 WHEN 'paused' THEN 2 ELSE 3 END, c.name`,
     [today],
   );
@@ -74,7 +85,14 @@ export async function getClientBySlug(slug: string): Promise<ClientSummary | nul
 }
 
 export async function clientOptions(): Promise<{ id: string; name: string }[]> {
-  return q(`SELECT id, name FROM clients WHERE status <> 'churned' ORDER BY name`);
+  return q(
+    `SELECT c.id, CASE WHEN p.name IS NULL THEN c.name ELSE p.name || ' › ' || c.name END AS name
+     FROM clients c LEFT JOIN clients p ON p.id = c.parent_id WHERE c.status <> 'churned' ORDER BY coalesce(p.name, c.name), p.name IS NOT NULL, c.name`,
+  );
+}
+
+export async function partners(): Promise<{ id: string; name: string; slug: string }[]> {
+  return q(`SELECT id, name, slug FROM clients WHERE is_partner AND status <> 'churned' ORDER BY name`);
 }
 
 // ── Tasks ──────────────────────────────────────────────────────────────────
@@ -131,7 +149,7 @@ export async function moneySummary(): Promise<MoneySummary> {
        FROM subscriptions WHERE status IN ('active','past_due')`,
     ),
     one<{ mrr: number }>(
-      `SELECT COALESCE(sum(retainer_cents), 0)::int AS mrr FROM clients WHERE status IN ('active','onboarding') AND jsonb_array_length(stripe_customer_ids) = 0`,
+      `SELECT COALESCE(sum(retainer_cents), 0)::int AS mrr FROM clients WHERE status IN ('active','onboarding') AND jsonb_array_length(stripe_customer_ids) = 0 AND parent_id IS NULL`,
     ),
     one<{ this_month: number; last_mtd: number }>(
       `WITH b AS (SELECT date_trunc('month', now() AT TIME ZONE $1) AS m, now() AT TIME ZONE $1 AS n)
@@ -197,7 +215,7 @@ export async function upcomingRenewals(days = 7): Promise<{ label: string; slug:
   );
   const manual = await q<{ label: string; slug: string; when: string; cents: number }>(
     `SELECT name AS label, slug, renewal_date::text AS when, retainer_cents AS cents FROM clients
-     WHERE status IN ('active','onboarding') AND renewal_date BETWEEN $1::date AND $1::date + $2::int`,
+     WHERE status IN ('active','onboarding') AND parent_id IS NULL AND renewal_date BETWEEN $1::date AND $1::date + $2::int`,
     [todayInTz(), days],
   );
   return [
@@ -293,7 +311,7 @@ export async function forecast(): Promise<Forecast> {
     `SELECT name AS label, slug AS client_slug, retainer_cents AS cents,
        COALESCE(EXTRACT(DAY FROM renewal_date), EXTRACT(DAY FROM start_date), 1)::int AS anchor_day
      FROM clients c WHERE status IN ('active','onboarding') AND retainer_cents > 0 AND jsonb_array_length(stripe_customer_ids) = 0
-       AND NOT EXISTS (SELECT 1 FROM recurring_payments r WHERE r.client_id = c.id AND r.active)`,
+       AND c.parent_id IS NULL AND NOT EXISTS (SELECT 1 FROM recurring_payments r WHERE r.client_id = c.id AND r.active)`,
   );
   const now = new Date();
   const horizon = toDay(new Date(now.getTime() + 183 * 86400000));

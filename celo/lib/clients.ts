@@ -69,6 +69,9 @@ export type NewClient = {
   website?: string;
   services?: string[];
   notes?: string;
+  is_partner?: boolean;
+  parent_name?: string;
+  meta_ad_account_id?: string;
 };
 
 /** Create a client, or update the one with the same name (case-insensitive). Returns its slug. */
@@ -76,20 +79,28 @@ export async function upsertClientByName(c: NewClient): Promise<{ slug: string; 
   const status = CLIENT_STATUSES.includes(c.status as ClientStatus) ? c.status : 'active';
   const existing = await one<{ id: string; slug: string }>(`SELECT id, slug FROM clients WHERE lower(name) = lower($1)`, [c.name]);
   const date = (v?: string | null) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
+  const parent = c.parent_name ? await one<{ id: string }>(`SELECT id FROM clients WHERE lower(name) = lower($1)`, [c.parent_name]) : null;
+  const extras = async (id: string) => {
+    if (c.is_partner != null) await q(`UPDATE clients SET is_partner = $2 WHERE id = $1`, [id, c.is_partner]);
+    if (parent && parent.id !== id) await q(`UPDATE clients SET parent_id = $2 WHERE id = $1`, [id, parent.id]);
+    if (c.meta_ad_account_id) await q(`UPDATE clients SET meta_ad_account_id = $2 WHERE id = $1`, [id, c.meta_ad_account_id.replace(/^act_/, '')]);
+  };
   if (existing) {
     await q(
       `UPDATE clients SET status = $2, retainer_cents = COALESCE($3, retainer_cents), start_date = COALESCE($4, start_date),
          renewal_date = COALESCE($5, renewal_date), notes = CASE WHEN $6 = '' THEN notes ELSE $6 END WHERE id = $1`,
       [existing.id, status, c.retainer_cents ?? null, date(c.start_date), date(c.renewal_date), c.notes ?? ''],
     );
+    await extras(existing.id);
     return { slug: existing.slug, created: false };
   }
   const slug = await uniqueSlug(c.name);
+  const newIdValue = newId('cli');
   await q(
     `INSERT INTO clients (id, slug, name, status, services, retainer_cents, start_date, renewal_date, contact_name, contact_email, website, email_domains, notes)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
     [
-      newId('cli'),
+      newIdValue,
       slug,
       c.name,
       status,
@@ -104,6 +115,7 @@ export async function upsertClientByName(c: NewClient): Promise<{ slug: string; 
       c.notes ?? '',
     ],
   );
+  await extras(newIdValue);
   return { slug, created: true };
 }
 

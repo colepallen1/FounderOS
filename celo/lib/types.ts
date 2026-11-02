@@ -36,6 +36,8 @@ export type Client = {
   meta_ad_account_id: string;
   google_ads_customer_id: string;
   notes: string;
+  is_partner: boolean;
+  parent_id: string | null;
 };
 
 export type Task = {
