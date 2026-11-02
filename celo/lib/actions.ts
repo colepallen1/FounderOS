@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { q, one, newId } from './db';
@@ -9,7 +9,7 @@ import { THEME_COOKIE } from './config';
 import { parseAmountToCents } from './money';
 import { parseDomains, slugify } from './slug';
 import { setSecret, setSetting, SECRET_KEYS, type SecretKey } from './settings';
-import { relinkPayments } from './integrations/stripe';
+import { ensureWebhook, relinkPayments } from './integrations/stripe';
 import { materializeRecurring, runSync, type SourceId } from './sync';
 import { CLIENT_STATUSES, TASK_STATUS_IDS } from './types';
 
@@ -274,13 +274,24 @@ export async function deleteManualPayment(id: string) {
 // ── Integrations, theme, sync ──────────────────────────────────────────────
 
 export async function saveSecrets(form: FormData) {
+  const saved: string[] = [];
   for (const key of Object.keys(SECRET_KEYS) as SecretKey[]) {
     if (key === 'google.refresh_token') continue; // only set by the OAuth callback
     if (!form.has(key)) continue;
     const v = str(form, key);
-    if (v) await setSecret(key, v);
+    if (v) {
+      await setSecret(key, v);
+      saved.push(key);
+    }
   }
-  revalidatePath('/settings');
+  // New Stripe key and no hand-pasted webhook secret: set up the webhook, then pull everything.
+  if (saved.includes('stripe.secret_key') && !saved.includes('stripe.webhook_secret')) {
+    const h = headers();
+    const origin = process.env.CELO_PUBLIC_URL?.replace(/\/$/, '') || `${h.get('x-forwarded-proto') ?? 'http'}://${h.get('x-forwarded-host') ?? h.get('host')}`;
+    await setSetting('stripe.webhook_status', await ensureWebhook(origin));
+    await runSync(['stripe']);
+  }
+  revalidatePath('/', 'layout');
 }
 
 export async function clearSecret(key: SecretKey) {

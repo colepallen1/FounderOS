@@ -51,6 +51,7 @@ export default async function Settings({ searchParams }: { searchParams: { googl
   const origin = `${h.get('x-forwarded-proto') ?? 'http'}://${h.get('x-forwarded-host') ?? h.get('host')}`;
   const [conn, runs, googleEmail, gid, gsec] = await Promise.all([configured(), syncRuns(), getSetting('google.email'), getSecret('google.client_id'), getSecret('google.client_secret')]);
   const webhook = await syncRuns().then((r) => r.get('stripe_webhook' as never));
+  const webhookStatus = await getSetting('stripe.webhook_status');
   const g = searchParams.google;
   const vaultOk = Boolean(appSecret());
 
@@ -75,17 +76,21 @@ export default async function Settings({ searchParams }: { searchParams: { googl
                 placeholder="rk_live_..."
                 hint={
                   <>
-                    Stripe Dashboard, Developers, API keys, Create restricted key. Read access to Customers, Charges, Subscriptions, Products and Prices is all this needs.
+                    <a href="https://dashboard.stripe.com/apikeys/create" target="_blank" rel="noreferrer" className="link">
+                      Create a restricted key
+                    </a>{' '}
+                    with <b className="text-muted">Read</b> on Customers, Charges, Subscriptions, Products and Prices, and <b className="text-muted">Write</b> on Webhook Endpoints. Saving it sets up the real-time webhook and imports your data automatically.
                   </>
                 }
               />
-              <SecretField k="stripe.webhook_secret" label="Webhook signing secret" placeholder="whsec_..." hint="Optional, but makes payments appear within seconds instead of on the next sync." />
+              <SecretField k="stripe.webhook_secret" label="Webhook signing secret" placeholder="whsec_..." hint="Filled in automatically when the key can manage webhooks. Otherwise paste one here." />
               <button className="btn">Save Stripe</button>
             </form>
             <div className="space-y-2 border-t border-line/60 pt-4 text-[12.5px] text-muted">
               <div className="eyebrow">Webhook endpoint</div>
               <Copy value={`${origin}/api/webhooks/stripe`} />
               <p className="text-faint">Events: charge.*, customer.subscription.*, customer.*, invoice.paid, invoice.payment_failed, refund.*</p>
+              {webhookStatus && <p className={/^Webhook created/.test(webhookStatus) ? 'text-good' : 'text-warn'}>{webhookStatus}</p>}
               {webhook?.last_ok_at && <p className="text-faint">Last webhook {fmtAgo(webhook.last_ok_at)} ({webhook.message})</p>}
             </div>
           </div>

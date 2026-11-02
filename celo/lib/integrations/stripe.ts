@@ -135,3 +135,52 @@ export async function syncStripe(): Promise<string> {
   await relinkPayments();
   return `${customers} customers, ${subs} subscriptions, ${charges} charges`;
 }
+
+export const WEBHOOK_EVENTS = [
+  'charge.succeeded',
+  'charge.failed',
+  'charge.refunded',
+  'charge.updated',
+  'customer.created',
+  'customer.updated',
+  'customer.deleted',
+  'customer.subscription.created',
+  'customer.subscription.updated',
+  'customer.subscription.deleted',
+  'invoice.paid',
+  'invoice.payment_failed',
+] as const;
+
+/**
+ * Create this deployment's webhook in Stripe and keep its signing secret, so
+ * pasting the API key is the only Stripe setup step. Replaces an endpoint we
+ * created before at the same URL (Stripe only reveals a secret on creation);
+ * never touches endpoints someone else made. Returns a status line.
+ */
+export async function ensureWebhook(origin: string): Promise<string> {
+  const stripe = await stripeClient();
+  if (!stripe) return 'No Stripe key saved.';
+  if (!origin.startsWith('https://')) return 'Webhook skipped: this server is not on a public https address yet.';
+  const url = `${origin}/api/webhooks/stripe`;
+  try {
+    for await (const ep of stripe.webhookEndpoints.list({ limit: 100 })) {
+      if (ep.url !== url) continue;
+      if (ep.metadata?.app !== 'celo-command') return 'A webhook for this URL already exists in Stripe but was not made here. Paste its signing secret below.';
+      await stripe.webhookEndpoints.del(ep.id);
+    }
+    const ep = await stripe.webhookEndpoints.create({
+      url,
+      enabled_events: [...WEBHOOK_EVENTS],
+      description: 'Celo Command dashboard (real-time updates)',
+      metadata: { app: 'celo-command' },
+    });
+    if (!ep.secret) return 'Stripe created the webhook but returned no secret.';
+    const { setSecret } = await import('../settings');
+    await setSecret('stripe.webhook_secret', ep.secret);
+    return `Webhook created: ${url}`;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/permission|restricted|rak_/i.test(msg)) return 'The key cannot manage webhooks. Add "Webhook Endpoints: Write" to the restricted key, or paste a signing secret by hand.';
+    return `Webhook not created: ${msg.slice(0, 200)}`;
+  }
+}

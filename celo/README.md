@@ -47,16 +47,16 @@ With no `DATABASE_URL`, it uses an embedded Postgres in `celo/.data/`. With no `
    - `CELO_TIMEZONE` (e.g. `America/New_York`) and `CELO_OWNER_NAME` (optional)
 4. **Deploy**, open the URL, sign in, and go to **Integrations**.
 
-### Stripe
-1. Stripe Dashboard → Developers → API keys → **Create restricted key** with **Read** on Customers, Charges, Subscriptions, Products and Prices. Paste it on Integrations.
-2. Developers → Webhooks → **Add endpoint**: `https://<your-app>/api/webhooks/stripe`. Add these events:
-   - `charge.succeeded`, `charge.failed`, `charge.refunded`, `charge.updated`
-   - `customer.created`, `customer.updated`, `customer.deleted`
-   - `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`
-   - `invoice.paid`, `invoice.payment_failed`
+### Stripe (one paste)
+1. [Create a restricted key](https://dashboard.stripe.com/apikeys/create) named `Celo Command`:
+   - **Read** on Customers, Charges, Subscriptions, Products and Prices
+   - **Write** on Webhook Endpoints
+2. Paste it on **Integrations → Stripe → Save**. The app then:
+   - creates its own webhook at `/api/webhooks/stripe` and stores the signing secret
+   - imports customers, subscriptions and 13 months of charges
+3. On **Clients**, click **Import from Stripe**. Every paying customer becomes a client, already linked.
 
-   Paste the signing secret (`whsec_...`) on Integrations.
-3. On each client → Settings → **Stripe customers**, tick the customers that belong to them.
+If you'd rather not give the key webhook access, leave that permission off, add the endpoint by hand in Stripe (events: `charge.*`, `customer.*`, `customer.subscription.*`, `invoice.paid`, `invoice.payment_failed`), and paste its `whsec_...` secret.
 
 ### Google (Calendar, Gmail, Google Ads)
 1. [Google Cloud console](https://console.cloud.google.com) → create a project → enable the **Google Calendar API**, **Gmail API** and **Google Ads API**.
