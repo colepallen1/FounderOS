@@ -19,7 +19,7 @@ function active(path: string, href: string) {
   return href === '/' ? path === '/' : path === href || path.startsWith(`${href}/`);
 }
 
-export function Shell({ children, theme, authOff, configured }: { children: ReactNode; theme: 'penthouse' | 'cave'; authOff: boolean; configured: boolean }) {
+export function Shell({ children, theme, authOff, configured, partners = [] }: { children: ReactNode; theme: 'penthouse' | 'cave'; authOff: boolean; configured: boolean; partners?: { name: string; slug: string }[] }) {
   const path = usePathname();
   if (path === '/login') return <>{children}</>;
   return (
@@ -35,8 +35,22 @@ export function Shell({ children, theme, authOff, configured }: { children: Reac
         <div className="mx-6 rule" />
         <nav className="mt-5 flex flex-col gap-0.5 px-3">
           {NAV.map((n) => {
-            const on = active(path, n.href);
-            return (
+            const on = active(path, n.href) && !(n.href === '/clients' && partners.some((p) => path.startsWith(`/clients/${p.slug}`)));
+            const sub =
+              n.href === '/clients' &&
+              partners.map((p) => {
+                const pOn = path === `/clients/${p.slug}` || path.startsWith(`/clients/${p.slug}?`);
+                return (
+                  <Link
+                    key={p.slug}
+                    href={`/clients/${p.slug}`}
+                    className={`ml-[26px] block truncate border-l py-1.5 pl-3 text-[12.5px] transition-colors ${pOn ? 'border-accent text-ink' : 'border-line text-faint hover:text-muted'}`}
+                  >
+                    {p.name}
+                  </Link>
+                );
+              });
+            return [
               <Link
                 key={n.href}
                 href={n.href}
@@ -44,8 +58,9 @@ export function Shell({ children, theme, authOff, configured }: { children: Reac
               >
                 <Icon name={n.icon} size={17} className={on ? 'text-accent' : 'text-faint group-hover:text-muted'} />
                 {n.label}
-              </Link>
-            );
+              </Link>,
+              sub,
+            ];
           })}
         </nav>
         <div className="mt-auto space-y-3 px-6 pb-6">

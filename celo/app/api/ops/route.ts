@@ -30,6 +30,9 @@ const Body = z.discriminatedUnion('action', [
     website: z.string().max(200).optional(),
     services: z.array(z.string().max(60)).max(10).optional(),
     notes: z.string().max(5000).optional(),
+    is_partner: z.boolean().optional(),
+    parent_name: z.string().max(200).optional(),
+    meta_ad_account_id: z.string().max(40).optional(),
   }),
 ]);
 
@@ -48,7 +51,7 @@ export async function POST(req: Request) {
     else if (b.action === 'dedupe_clients') result = { removed: await dedupeClients() };
     else if (b.action === 'list_clients') {
       result = await q(
-        `SELECT name, status, retainer_cents, jsonb_typeof(stripe_customer_ids) AS ids_type, stripe_customer_ids FROM clients ORDER BY name`,
+        `SELECT c.name, c.status, c.retainer_cents, jsonb_typeof(c.stripe_customer_ids) AS ids_type, c.stripe_customer_ids, c.is_partner, p.name AS parent FROM clients c LEFT JOIN clients p ON p.id = c.parent_id ORDER BY c.name`,
       );
     }
     else {

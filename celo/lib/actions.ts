@@ -80,8 +80,41 @@ export async function updateClient(form: FormData) {
       str(form, 'google_ads_customer_id').replace(/[^\d]/g, ''),
     ],
   );
+  // Partner flag and "billed through" (a client cannot sit under itself or under one of its own clients).
+  const parent = str(form, 'parent_id') || null;
+  await q(
+    `UPDATE clients SET is_partner = $2, parent_id = CASE WHEN $3::text IS NULL OR $3 = id OR EXISTS (SELECT 1 FROM clients k WHERE k.id = $3 AND k.parent_id = clients.id) THEN NULL ELSE $3 END WHERE id = $1`,
+    [id, form.get('is_partner') === 'on', parent],
+  );
   refresh(slug);
   if (slug !== current.slug) redirect(`/clients/${slug}?tab=settings`);
+}
+
+/** Add one of a partner's own clients (e.g. a Takeover Media client), with its fee and ad account. */
+export async function createSubClient(form: FormData) {
+  const parentId = str(form, 'parent_id');
+  const name = str(form, 'name');
+  const parent = await one<{ slug: string }>(`SELECT slug FROM clients WHERE id = $1`, [parentId]);
+  if (!name || !parent) return;
+  await q(
+    `INSERT INTO clients (id, slug, name, status, services, retainer_cents, start_date, contact_email, website, email_domains, meta_ad_account_id, parent_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+    [
+      newId('cli'),
+      await uniqueSlug(name),
+      name,
+      z.enum(CLIENT_STATUSES).catch('active').parse(str(form, 'status')),
+      JSON.stringify(['Paid ads']),
+      parseAmountToCents(str(form, 'fee')) ?? 0,
+      dateOrNull(str(form, 'start_date')),
+      str(form, 'contact_email').toLowerCase(),
+      str(form, 'website'),
+      JSON.stringify(parseDomains(`${str(form, 'website')} ${str(form, 'contact_email')}`)),
+      str(form, 'meta_ad_account_id').replace(/^act_/, ''),
+      parentId,
+    ],
+  );
+  refresh(parent.slug);
 }
 
 export async function saveClientNotes(id: string, notes: string) {

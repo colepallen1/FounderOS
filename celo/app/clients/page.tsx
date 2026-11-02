@@ -12,9 +12,10 @@ export const dynamic = 'force-dynamic';
 export default async function Clients({ searchParams }: { searchParams: { show?: string } }) {
   const [all, importable] = await Promise.all([listClients(), importableStripeCount()]);
   const showAll = searchParams.show === 'all';
-  const clients = showAll ? all : all.filter((c) => c.status !== 'churned');
+  const top = all.filter((c) => !c.parent_id);
+  const clients = showAll ? top : top.filter((c) => c.status !== 'churned');
   const mrr = all.reduce((s, c) => s + (c.status === 'churned' ? 0 : c.mrr_cents), 0);
-  const churned = all.length - all.filter((c) => c.status !== 'churned').length;
+  const churned = top.length - top.filter((c) => c.status !== 'churned').length;
   return (
     <>
       <PageHeader eyebrow={`${all.filter((c) => c.status === 'active' || c.status === 'onboarding').length} active · ${formatMoney(mrr)} MRR`} title="Clients">
@@ -45,7 +46,9 @@ export default async function Clients({ searchParams }: { searchParams: { show?:
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="display truncate text-[24px] leading-tight text-ink group-hover:text-accent-hi">{c.name}</div>
-                  <div className="mt-1 truncate text-[12px] text-faint">{c.services.length ? c.services.join(' · ') : 'No services set'}</div>
+                  <div className="mt-1 truncate text-[12px] text-faint">
+                    {c.is_partner ? `Partner · ${c.sub_count} client${c.sub_count === 1 ? '' : 's'}${c.sub_fees_cents ? ` · ${formatMoney(c.sub_fees_cents)}/mo in fees` : ''}` : c.services.length ? c.services.join(' · ') : 'No services set'}
+                  </div>
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-1">
                   <Badge tone={STATUS_TONE[c.status]}>{c.status}</Badge>

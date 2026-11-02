@@ -7,6 +7,7 @@ import { Kanban } from '@/components/Kanban';
 import { NotesEditor } from '@/components/NotesEditor';
 import { Objectives } from '@/components/Objectives';
 import { MetaCampaigns } from '@/components/MetaCampaigns';
+import { PartnerClients } from '@/components/PartnerClients';
 import { loadAccount, type MetaAccount } from '@/lib/integrations/meta-manage';
 import { q } from '@/lib/db';
 import { ManualPaymentForm, PaymentsTable } from '@/components/Payments';
@@ -24,7 +25,10 @@ import {
   clientMonthSeries,
   clientOptions,
   events,
+  forecast,
   getClientBySlug,
+  listClients,
+  partners as listPartners,
   listObjectives,
   listPayments,
   listRecurringPayments,
@@ -45,13 +49,15 @@ export async function generateMetadata({ params }: { params: { slug: string } })
   return { title: c?.name ?? 'Client' };
 }
 
-const TAB_IDS = ['overview', 'work', 'revenue', 'ads', 'comms', 'settings'] as const;
+const TAB_IDS = ['clients', 'overview', 'work', 'revenue', 'ads', 'comms', 'settings'] as const;
 type Tab = (typeof TAB_IDS)[number];
 
 export default async function ClientPage({ params, searchParams }: { params: { slug: string }; searchParams: { tab?: string } }) {
   const c = await getClientBySlug(params.slug);
   if (!c) notFound();
-  const tab: Tab = (TAB_IDS as readonly string[]).includes(searchParams.tab ?? '') ? (searchParams.tab as Tab) : 'overview';
+  const fallback: Tab = c.is_partner ? 'clients' : 'overview';
+  const asked = (TAB_IDS as readonly string[]).includes(searchParams.tab ?? '') ? (searchParams.tab as Tab) : fallback;
+  const tab: Tab = asked === 'clients' && !c.is_partner ? 'overview' : asked;
   const [tasks, conn] = await Promise.all([listTasks(c.id), configured()]);
   const open = tasks.filter((t) => t.status !== 'done');
   const base = `/clients/${c.slug}`;
@@ -59,13 +65,21 @@ export default async function ClientPage({ params, searchParams }: { params: { s
 
   return (
     <>
-      <div className="mb-2 text-[12px]">
-        <Link href="/clients" className="text-faint hover:text-muted">
+      <div className="mb-2 flex gap-1.5 text-[12px] text-faint">
+        <Link href="/clients" className="hover:text-muted">
           Clients
         </Link>
+        {c.parent_slug && (
+          <>
+            <span>›</span>
+            <Link href={`/clients/${c.parent_slug}`} className="hover:text-muted">
+              {c.parent_name}
+            </Link>
+          </>
+        )}
       </div>
       <PageHeader
-        eyebrow={[c.services.join(' · ') || 'Client', c.start_date ? `since ${fmtDate(c.start_date, { month: 'short', year: 'numeric' })}` : ''].filter(Boolean).join(' · ')}
+        eyebrow={[c.is_partner ? 'Partner' : c.parent_name ? `${c.parent_name} client` : c.services.join(' · ') || 'Client', c.start_date ? `since ${fmtDate(c.start_date, { month: 'short', year: 'numeric' })}` : ''].filter(Boolean).join(' · ')}
         title={c.name}
       >
         <Badge tone={STATUS_TONE[c.status]}>{c.status}</Badge>
@@ -86,6 +100,7 @@ export default async function ClientPage({ params, searchParams }: { params: { s
         base={base}
         current={tab}
         tabs={[
+          ...(c.is_partner ? [{ id: 'clients', label: 'Clients', count: c.sub_count }] : []),
           { id: 'overview', label: 'Overview' },
           { id: 'work', label: 'Work', count: open.length },
           { id: 'revenue', label: 'Revenue' },
@@ -95,6 +110,7 @@ export default async function ClientPage({ params, searchParams }: { params: { s
         ]}
       />
 
+      {tab === 'clients' && <PartnerTab c={c} />}
       {tab === 'overview' && <Overview c={c} open={open} conn={conn} />}
       {tab === 'work' && <WorkTab c={c} tasks={tasks} fixed={fixed} />}
       {tab === 'revenue' && <RevenueTab c={c} fixed={fixed} stripeOn={conn.stripe} />}
@@ -107,6 +123,15 @@ export default async function ClientPage({ params, searchParams }: { params: { s
 
 type Conn = Awaited<ReturnType<typeof configured>>;
 
+async function PartnerTab({ c }: { c: ClientSummary }) {
+  const [all, f] = await Promise.all([listClients(), forecast()]);
+  const subs = all.filter((k) => k.parent_id === c.id);
+  // A Stripe trial is not MRR yet, but it is what the partner has signed up to pay.
+  const trial = f.starting.filter((s) => s.client_slug === c.slug);
+  const pending = trial.reduce((t, s) => t + s.monthly_cents, 0);
+  return <PartnerClients partner={c} subs={subs} pendingCents={pending} startsOn={trial[0] ? fmtDate(trial[0].starts) : null} />;
+}
+
 async function Overview({ c, open, conn }: { c: ClientSummary; open: Awaited<ReturnType<typeof listTasks>>; conn: Conn }) {
   const today = todayInTz();
   const [objectives, ads, upcoming, mail] = await Promise.all([listObjectives(c.id), adTotals(c.id), events({ clientId: c.id }), clientEmails(c.id)]);
@@ -118,7 +143,11 @@ async function Overview({ c, open, conn }: { c: ClientSummary; open: Awaited<Ret
   return (
     <>
       <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
-        <Stat label="Monthly recurring" value={c.mrr_cents ? formatMoney(c.mrr_cents) : '-'} sub={c.mrr_source === 'stripe' ? 'From Stripe' : c.mrr_source === 'manual' ? 'Manual retainer' : 'No retainer set'} href={`/clients/${c.slug}?tab=revenue`} />
+        {c.mrr_source === 'parent' ? (
+          <Stat label="Monthly fee" value={c.retainer_cents ? formatMoney(c.retainer_cents) : '-'} sub={`Billed through ${c.parent_name}`} href={`/clients/${c.parent_slug}`} />
+        ) : (
+          <Stat label="Monthly recurring" value={c.mrr_cents ? formatMoney(c.mrr_cents) : '-'} sub={c.mrr_source === 'stripe' ? 'From Stripe' : c.mrr_source === 'manual' ? 'Manual retainer' : 'No retainer set'} href={`/clients/${c.slug}?tab=revenue`} />
+        )}
         <Stat label="Lifetime value" value={c.ltv_cents ? formatMoney(c.ltv_cents, 'usd') : '-'} sub={c.last_paid_at ? `Last paid ${fmtDate(c.last_paid_at)}` : 'No payments yet'} href={`/clients/${c.slug}?tab=revenue`} />
         <Stat label="Open tasks" value={open.length} tone={overdue ? 'bad' : undefined} sub={overdue ? `${overdue} overdue` : 'Nothing overdue'} href={`/clients/${c.slug}?tab=work`} />
         <Stat
@@ -462,14 +491,14 @@ async function CommsTab({ c, conn }: { c: ClientSummary; conn: Conn }) {
 }
 
 async function SettingsTab({ c, stripeOn }: { c: ClientSummary; stripeOn: boolean }) {
-  const customers = stripeOn ? await stripeCustomers() : [];
+  const [customers, partnerList] = await Promise.all([stripeOn ? stripeCustomers() : Promise.resolve([]), listPartners()]);
   const linked = new Set(c.stripe_customer_ids);
   return (
     <div className="grid gap-4 xl:grid-cols-3">
       <Panel title="Profile & connections" icon="settings" className="xl:col-span-2">
         <form action={updateClient} className="space-y-6">
           <input type="hidden" name="id" value={c.id} />
-          <ClientFields c={c} full />
+          <ClientFields c={c} full partners={partnerList} />
           <button className="btn">Save changes</button>
         </form>
       </Panel>

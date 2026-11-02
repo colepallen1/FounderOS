@@ -157,6 +157,10 @@ CREATE TABLE IF NOT EXISTS recurring_payments (
 
 ALTER TABLE payments ADD COLUMN IF NOT EXISTS recurring_id TEXT;
 
+-- Partners (agencies that resell): their own clients sit under them (added 2026-11-02).
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS is_partner BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS parent_id TEXT REFERENCES clients(id) ON DELETE SET NULL;
+
 -- Every change made to a client's ads from the dashboard (added 2026-11-02).
 CREATE TABLE IF NOT EXISTS ad_changes (
   id BIGSERIAL PRIMARY KEY,
