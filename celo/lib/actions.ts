@@ -13,6 +13,8 @@ import { ensureWebhook, relinkPayments } from './integrations/stripe';
 import { ignoreCustomers, importStripeClients as importClientsFromStripe, uniqueSlug } from './clients';
 import { materializeRecurring, materializeRecurringPayments, runSync, type SourceId } from './sync';
 import { PAY_CADENCES } from './recurring';
+import { setDailyBudget as setMetaBudget, setStatus as setMetaStatus } from './integrations/meta-manage';
+import { checkBudgetChange } from './integrations/meta-parse';
 import { CLIENT_STATUSES, TASK_STATUS_IDS } from './types';
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? '').trim();
@@ -314,4 +316,41 @@ export async function syncNow(only?: SourceId[]) {
   const result = await runSync(only);
   revalidatePath('/', 'layout');
   return result;
+}
+
+// ── Meta campaign controls ─────────────────────────────────────────────────
+
+type MetaResult = { ok: true } | { ok: false, error: string };
+
+async function clientAct(clientId: string): Promise<{ act: string; slug: string }> {
+  const c = await one<{ act: string; slug: string }>(`SELECT meta_ad_account_id AS act, slug FROM clients WHERE id = $1`, [clientId]);
+  if (!c?.act) throw new Error('This client has no Meta ad account linked.');
+  return c;
+}
+
+export async function metaSetStatus(clientId: string, objectId: string, status: 'ACTIVE' | 'PAUSED'): Promise<MetaResult> {
+  try {
+    const { act, slug } = await clientAct(clientId);
+    await setMetaStatus(clientId, act, objectId, status);
+    revalidatePath(`/clients/${slug}`);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/** `amount` is in whole currency units as typed (e.g. "75" or "75.50"). */
+export async function metaSetBudget(clientId: string, objectId: string, amount: string, currentMinor: number | null, unit: number): Promise<MetaResult> {
+  try {
+    const value = Number(amount.replace(/[$,\s]/g, ''));
+    const minor = Math.round(value * unit);
+    const problem = checkBudgetChange(currentMinor, minor, unit);
+    if (problem) return { ok: false, error: problem };
+    const { act, slug } = await clientAct(clientId);
+    await setMetaBudget(clientId, act, objectId, minor);
+    revalidatePath(`/clients/${slug}`);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
 }

@@ -48,13 +48,13 @@ export default async function Command() {
       <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <Stat
           label="Monthly recurring"
-          value={formatMoney(money.mrr, cur, { compact: true })}
+          value={formatMoney(money.mrr, cur)}
           href={conn.stripe ? '/money' : '/settings#stripe'}
           sub={
             conn.stripe ? (
               <>
                 {money.activeSubs} Stripe retainer{money.activeSubs === 1 ? '' : 's'}
-                {money.manualMrr > 0 && <> · {formatMoney(money.manualMrr, cur, { compact: true })} off-Stripe</>}
+                {money.manualMrr > 0 && <> · {formatMoney(money.manualMrr, cur)} off-Stripe</>}
                 {f.starting.map((s) => (
                   <span key={s.label + s.starts} className="block text-accent-hi">
                     +{formatMoney(s.monthly_cents, cur)}/mo from {fmtDate(s.starts)}
@@ -68,7 +68,7 @@ export default async function Command() {
         />
         <Stat
           label="Collected this month"
-          value={formatMoney(money.cashThisMonth, cur, { compact: true })}
+          value={formatMoney(money.cashThisMonth, cur)}
           href="/money"
           sub={
             delta == null ? (
@@ -90,9 +90,9 @@ export default async function Command() {
         />
         <Stat
           label="Expected · 30 days"
-          value={formatMoney(f.next30, cur, { compact: true })}
+          value={formatMoney(f.next30, cur)}
           href="/money"
-          sub={`${renewals.length ? `${renewals.length} renewing this week · ` : ''}${formatMoney(f.next90, cur, { compact: true })} over 90 days`}
+          sub={`${renewals.length ? `${renewals.length} renewing this week · ` : ''}${formatMoney(f.next90, cur)} over 90 days`}
           tone={renewals.some((r) => r.cancelling) ? 'warn' : undefined}
         />
       </div>

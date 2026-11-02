@@ -150,7 +150,7 @@ export default async function Settings({ searchParams }: { searchParams: { googl
               k="meta.access_token"
               label="System user access token"
               placeholder="EAAG..."
-              hint="Business Settings, System users, Generate token with ads_read for the client ad accounts. System user tokens do not expire."
+              hint="Business Settings, System users, add the client ad accounts, Generate token with ads_management (to pause and change budgets from here) and ads_read. System user tokens do not expire."
             />
             <button className="btn">Save Meta</button>
             <p className="text-[11px] text-faint">Graph API {META_VERSION}. Override with META_API_VERSION.</p>

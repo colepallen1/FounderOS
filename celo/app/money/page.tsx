@@ -37,9 +37,9 @@ export default async function Money({ searchParams }: { searchParams: { status?:
     <>
       <PageHeader eyebrow="Revenue" title="Money" />
       <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
-        <Stat label="Monthly recurring" value={formatMoney(money.mrr, cur, { compact: true })} sub={`${formatMoney(money.stripeMrr, cur)} Stripe · ${formatMoney(money.manualMrr, cur)} manual`} />
-        <Stat label="Annual run rate" value={formatMoney(money.mrr * 12, cur, { compact: true })} sub="MRR x 12" />
-        <Stat label="Collected this month" value={formatMoney(money.cashThisMonth, cur, { compact: true })} sub={`${formatMoney(money.cashLastMonthToDate, cur)} by this point last month`} />
+        <Stat label="Monthly recurring" value={formatMoney(money.mrr, cur)} sub={`${formatMoney(money.stripeMrr, cur)} Stripe · ${formatMoney(money.manualMrr, cur)} manual`} />
+        <Stat label="Annual run rate" value={formatMoney(money.mrr * 12, cur)} sub="MRR x 12" />
+        <Stat label="Collected this month" value={formatMoney(money.cashThisMonth, cur)} sub={`${formatMoney(money.cashLastMonthToDate, cur)} by this point last month`} />
         <Stat label="Past due" value={money.pastDue} tone={money.pastDue ? 'bad' : undefined} sub={`${money.failed30d} failed charge${money.failed30d === 1 ? '' : 's'} in 30 days`} />
       </div>
 
