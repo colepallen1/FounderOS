@@ -17,7 +17,7 @@ export default async function Clients({ searchParams }: { searchParams: { show?:
   const churned = all.length - all.filter((c) => c.status !== 'churned').length;
   return (
     <>
-      <PageHeader eyebrow={`${all.filter((c) => c.status === 'active').length} active · ${formatMoney(mrr)} MRR`} title="Clients">
+      <PageHeader eyebrow={`${all.filter((c) => c.status === 'active' || c.status === 'onboarding').length} active · ${formatMoney(mrr)} MRR`} title="Clients">
         {churned > 0 && (
           <Link href={showAll ? '/clients' : '/clients?show=all'} className="btn-ghost">
             {showAll ? 'Hide churned' : `Show churned (${churned})`}

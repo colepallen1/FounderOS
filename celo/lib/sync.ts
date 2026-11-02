@@ -2,6 +2,7 @@ import 'server-only';
 import { q, one, newId } from './db';
 import { getSecret } from './settings';
 import { syncStripe } from './integrations/stripe';
+import { importStripeClients } from './clients';
 import { syncCalendar, syncGmail, syncGoogleAds } from './integrations/google';
 import { syncMeta } from './integrations/meta';
 import { dueOccurrences, toDay, type Cadence } from './recurring';
@@ -9,7 +10,15 @@ import { dueOccurrences, toDay, type Cadence } from './recurring';
 export type SourceId = 'stripe' | 'calendar' | 'gmail' | 'meta' | 'google_ads';
 
 export const SOURCES: { id: SourceId; label: string; run: () => Promise<string> }[] = [
-  { id: 'stripe', label: 'Stripe', run: syncStripe },
+  {
+    id: 'stripe',
+    label: 'Stripe',
+    run: async () => {
+      const msg = await syncStripe();
+      const added = await importStripeClients();
+      return added ? `${msg}, ${added} new client${added === 1 ? '' : 's'}` : msg;
+    },
+  },
   { id: 'calendar', label: 'Google Calendar', run: syncCalendar },
   { id: 'gmail', label: 'Gmail', run: syncGmail },
   { id: 'meta', label: 'Meta Ads', run: syncMeta },

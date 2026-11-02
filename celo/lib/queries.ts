@@ -263,7 +263,7 @@ export async function clientEmails(clientId: string): Promise<Email[]> {
 export async function importableStripeCount(): Promise<number> {
   const row = await one<{ n: number }>(
     `SELECT count(DISTINCT sc.id)::int AS n FROM stripe_customers sc JOIN subscriptions s ON s.stripe_customer_id = sc.id
-     WHERE s.status IN ('active','past_due','paused') AND NOT EXISTS (SELECT 1 FROM clients c WHERE c.stripe_customer_ids @> to_jsonb(sc.id))`,
+     WHERE s.status IN ('active','past_due','paused','trialing') AND NOT EXISTS (SELECT 1 FROM clients c WHERE c.stripe_customer_ids @> to_jsonb(sc.id))`,
   );
   return row?.n ?? 0;
 }
