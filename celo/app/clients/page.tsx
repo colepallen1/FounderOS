@@ -56,12 +56,12 @@ export default async function Clients({ searchParams }: { searchParams: { show?:
               <dl className="grid grid-cols-3 gap-3">
                 <div>
                   <dt className="eyebrow">MRR</dt>
-                  <dd className="num mt-1 text-[22px]">{c.mrr_cents ? formatMoney(c.mrr_cents, 'usd', { compact: true }) : <span className="text-faint">-</span>}</dd>
+                  <dd className="num mt-1 text-[22px]">{c.mrr_cents ? formatMoney(c.mrr_cents, 'usd') : <span className="text-faint">-</span>}</dd>
                   {c.mrr_source === 'manual' && <dd className="text-[10.5px] text-faint">manual</dd>}
                 </div>
                 <div>
                   <dt className="eyebrow">Lifetime</dt>
-                  <dd className="num mt-1 text-[22px]">{c.ltv_cents ? formatMoney(c.ltv_cents, 'usd', { compact: true }) : <span className="text-faint">-</span>}</dd>
+                  <dd className="num mt-1 text-[22px]">{c.ltv_cents ? formatMoney(c.ltv_cents, 'usd') : <span className="text-faint">-</span>}</dd>
                 </div>
                 <div>
                   <dt className="eyebrow">Open tasks</dt>

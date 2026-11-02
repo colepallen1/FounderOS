@@ -32,3 +32,24 @@ describe('parseMetaInsight', () => {
     expect(r).toEqual({ spend: 12345, impressions: 10000, clicks: 250, conversions: 10, value: 45010 });
   });
 });
+
+import { checkBudgetChange, minorUnits, parsePerf } from '@/lib/integrations/meta-parse';
+
+describe('Meta controls', () => {
+  it('budgets are in cents for USD, whole units for JPY', () => {
+    expect(minorUnits('USD')).toBe(100);
+    expect(minorUnits('jpy')).toBe(1);
+  });
+  it('guards budget changes', () => {
+    expect(checkBudgetChange(5000, 7500, 100)).toBeNull(); // $50 -> $75
+    expect(checkBudgetChange(5000, 50, 100)).toMatch(/at least/); // $0.50
+    expect(checkBudgetChange(5000, 30000, 100)).toMatch(/5x/); // $50 -> $300
+    expect(checkBudgetChange(5000, 900, 100)).toMatch(/fifth/); // $50 -> $9
+    expect(checkBudgetChange(null, 2000, 100)).toBeNull();
+    expect(checkBudgetChange(5000, NaN, 100)).toMatch(/at least/);
+  });
+  it('reads spend and cost per result from insights', () => {
+    expect(parsePerf({ data: [{ date_start: '2026-10-27', spend: '210.00', actions: [{ action_type: 'lead', value: '14' }] }] })).toEqual({ spend_cents: 21000, results: 14, cost_per_result_cents: 1500 });
+    expect(parsePerf(undefined)).toEqual({ spend_cents: 0, results: 0, cost_per_result_cents: null });
+  });
+});

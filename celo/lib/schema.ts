@@ -157,6 +157,18 @@ CREATE TABLE IF NOT EXISTS recurring_payments (
 
 ALTER TABLE payments ADD COLUMN IF NOT EXISTS recurring_id TEXT;
 
+-- Every change made to a client's ads from the dashboard (added 2026-11-02).
+CREATE TABLE IF NOT EXISTS ad_changes (
+  id BIGSERIAL PRIMARY KEY,
+  client_id TEXT REFERENCES clients(id) ON DELETE CASCADE,
+  object_id TEXT NOT NULL,
+  object_name TEXT NOT NULL DEFAULT '',
+  change TEXT NOT NULL,
+  old_value TEXT NOT NULL DEFAULT '',
+  new_value TEXT NOT NULL DEFAULT '',
+  at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- Repair (2026-11-02): JSON arrays once stored double-encoded as JSON strings.
 UPDATE clients SET stripe_customer_ids = (stripe_customer_ids #>> '{}')::jsonb WHERE jsonb_typeof(stripe_customer_ids) = 'string';
 UPDATE clients SET email_domains = (email_domains #>> '{}')::jsonb WHERE jsonb_typeof(email_domains) = 'string';

@@ -20,7 +20,7 @@ export function fmtAgo(iso: string | null | undefined): string {
 }
 
 export function fmtNum(n: number, digits = 0): string {
-  return new Intl.NumberFormat('en-US', { maximumFractionDigits: digits, notation: Math.abs(n) >= 100000 ? 'compact' : 'standard' }).format(n);
+  return new Intl.NumberFormat('en-US', { maximumFractionDigits: digits }).format(n);
 }
 
 /** "in 3 days", "today", "2 days ago" for ISO day strings relative to `today`. */

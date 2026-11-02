@@ -24,3 +24,30 @@ export function parseMetaInsight(r: InsightRow) {
   };
 }
 
+
+/** Currencies Meta bills without a minor unit (budgets are whole units, not cents). */
+const ZERO_DECIMAL = new Set(['JPY', 'KRW', 'CLP', 'VND', 'ISK', 'TWD', 'HUF', 'PYG', 'COP', 'IDR']);
+export function minorUnits(currency: string): number {
+  return ZERO_DECIMAL.has(currency.toUpperCase()) ? 1 : 100;
+}
+
+export type Perf = { spend_cents: number; results: number; cost_per_result_cents: number | null };
+
+/** Spend and results (leads + purchases) from an `insights` edge, in cents. */
+export function parsePerf(insights: { data?: InsightRow[] } | undefined): Perf {
+  const row = insights?.data?.[0];
+  if (!row) return { spend_cents: 0, results: 0, cost_per_result_cents: null };
+  const p = parseMetaInsight(row);
+  return { spend_cents: p.spend, results: p.conversions, cost_per_result_cents: p.conversions ? Math.round(p.spend / p.conversions) : null };
+}
+
+/**
+ * Sanity limits on a budget change made from the dashboard: at least 1.00, and no
+ * more than 5x (or below a fifth of) the current budget in one step. Returns an error or null.
+ */
+export function checkBudgetChange(currentMinor: number | null, nextMinor: number, unit: number): string | null {
+  if (!Number.isFinite(nextMinor) || nextMinor < unit) return 'Daily budget must be at least 1.00.';
+  if (currentMinor && nextMinor > currentMinor * 5) return 'That is more than 5x the current budget. Raise it in steps, or change it in Ads Manager.';
+  if (currentMinor && nextMinor * 5 < currentMinor) return 'That is less than a fifth of the current budget. Pause it instead, or change it in Ads Manager.';
+  return null;
+}

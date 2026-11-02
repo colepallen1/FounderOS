@@ -6,6 +6,9 @@ import { Icon } from '@/components/Icon';
 import { Kanban } from '@/components/Kanban';
 import { NotesEditor } from '@/components/NotesEditor';
 import { Objectives } from '@/components/Objectives';
+import { MetaCampaigns } from '@/components/MetaCampaigns';
+import { loadAccount, type MetaAccount } from '@/lib/integrations/meta-manage';
+import { q } from '@/lib/db';
 import { ManualPaymentForm, PaymentsTable } from '@/components/Payments';
 import { RecurringManager } from '@/components/Recurring';
 import { RecurringPayments } from '@/components/RecurringPayments';
@@ -116,11 +119,11 @@ async function Overview({ c, open, conn }: { c: ClientSummary; open: Awaited<Ret
     <>
       <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <Stat label="Monthly recurring" value={c.mrr_cents ? formatMoney(c.mrr_cents) : '-'} sub={c.mrr_source === 'stripe' ? 'From Stripe' : c.mrr_source === 'manual' ? 'Manual retainer' : 'No retainer set'} href={`/clients/${c.slug}?tab=revenue`} />
-        <Stat label="Lifetime value" value={c.ltv_cents ? formatMoney(c.ltv_cents, 'usd', { compact: true }) : '-'} sub={c.last_paid_at ? `Last paid ${fmtDate(c.last_paid_at)}` : 'No payments yet'} href={`/clients/${c.slug}?tab=revenue`} />
+        <Stat label="Lifetime value" value={c.ltv_cents ? formatMoney(c.ltv_cents, 'usd') : '-'} sub={c.last_paid_at ? `Last paid ${fmtDate(c.last_paid_at)}` : 'No payments yet'} href={`/clients/${c.slug}?tab=revenue`} />
         <Stat label="Open tasks" value={open.length} tone={overdue ? 'bad' : undefined} sub={overdue ? `${overdue} overdue` : 'Nothing overdue'} href={`/clients/${c.slug}?tab=work`} />
         <Stat
           label="Ad spend · 30d"
-          value={spend ? formatMoney(spend, 'usd', { compact: true }) : '-'}
+          value={spend ? formatMoney(spend, 'usd') : '-'}
           sub={spend ? (value ? `${(value / spend).toFixed(2)}x ROAS` : conv ? `${fmtNum(conv)} conversions · ${formatMoney(Math.round(spend / conv))} each` : 'No conversions tracked') : c.meta_ad_account_id || c.google_ads_customer_id ? 'Waiting for first sync' : 'No ad account linked'}
           href={`/clients/${c.slug}?tab=ads`}
         />
@@ -338,6 +341,7 @@ async function AdsTab({ c, conn }: { c: ClientSummary; conn: Conn }) {
           />
         </Panel>
       )}
+      {c.meta_ad_account_id && conn.meta && <MetaControl c={c} />}
       <AdBlock a={meta} label="Meta Ads" />
       <AdBlock a={google} label="Google Ads" />
       {linked && !totals.length && (conn.meta || conn.google_ads) && (
@@ -350,6 +354,43 @@ async function AdsTab({ c, conn }: { c: ClientSummary; conn: Conn }) {
         </Panel>
       )}
     </div>
+  );
+}
+
+async function MetaControl({ c }: { c: ClientSummary }) {
+  let acct: MetaAccount | null = null;
+  let error: string | null = null;
+  try {
+    acct = await loadAccount(c.meta_ad_account_id);
+  } catch (err) {
+    error = err instanceof Error ? err.message : String(err);
+  }
+  const changes = await q<{ object_name: string; change: string; old_value: string; new_value: string; at: string }>(
+    `SELECT object_name, change, old_value, new_value, at::text FROM ad_changes WHERE client_id = $1 ORDER BY at DESC LIMIT 8`,
+    [c.id],
+  );
+  const unit = acct?.unit ?? 100;
+  const cur = acct?.currency ?? 'USD';
+  const show = (ch: string, v: string) => (ch === 'daily_budget' ? formatMoney(Math.round((Number(v) / unit) * 100), cur.toLowerCase(), { cents: true }) : v.toLowerCase());
+  return (
+    <Panel title="Meta campaigns · live" icon="ads" pad={false} action={<a href={`https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=${c.meta_ad_account_id.replace(/^act_/, '')}`} target="_blank" rel="noreferrer" className="link inline-flex items-center gap-1 text-[12px]">Ads Manager <Icon name="external" size={11} /></a>}>
+      <div className="pt-4">
+        {error ? <p className="px-5 pb-5 text-[13px] text-bad">{error}</p> : acct && <MetaCampaigns acct={acct} clientId={c.id} />}
+        {changes.length > 0 && (
+          <div className="border-t border-line/60 px-5 py-4">
+            <div className="eyebrow mb-2">Changes made here</div>
+            <ul className="space-y-1 text-[12.5px] text-muted">
+              {changes.map((ch, i) => (
+                <li key={i}>
+                  <span className="text-faint">{fmtDate(ch.at, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span> · {ch.object_name}:{' '}
+                  {ch.change === 'status' ? 'status' : 'daily budget'} {show(ch.change, ch.old_value)} → <span className="text-ink">{show(ch.change, ch.new_value)}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    </Panel>
   );
 }
 

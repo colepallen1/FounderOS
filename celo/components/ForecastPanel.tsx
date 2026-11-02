@@ -19,7 +19,7 @@ export function ForecastPanel({ f, currency = 'usd' }: { f: Forecast; currency?:
         ].map(([k, v]) => (
           <div key={k as string}>
             <dt className="eyebrow">{k}</dt>
-            <dd className="num mt-1.5 text-[26px] sm:text-[32px]">{formatMoney(v as number, currency, { compact: true })}</dd>
+            <dd className="num mt-1.5 text-[26px] sm:text-[32px]">{formatMoney(v as number, currency)}</dd>
           </div>
         ))}
       </dl>
