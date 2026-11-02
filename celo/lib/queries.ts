@@ -24,7 +24,7 @@ const PAYMENT_SELECT = `SELECT p.id, p.source, p.client_id, c.name AS client_nam
 
 const SUB_SELECT = `SELECT s.id, s.stripe_customer_id, COALESCE(NULLIF(sc.name, ''), NULLIF(sc.email, ''), s.stripe_customer_id) AS customer_label,
   c.name AS client_name, c.slug AS client_slug, s.status, s.mrr_cents, s.currency, s.current_period_end::text,
-  (s.cancel_at_period_end OR s.cancel_at IS NOT NULL) AS cancel_at_period_end, s.description
+  (s.cancel_at_period_end OR s.cancel_at IS NOT NULL) AS cancel_at_period_end, s.description, s.items
   FROM subscriptions s LEFT JOIN stripe_customers sc ON sc.id = s.stripe_customer_id
   LEFT JOIN clients c ON c.stripe_customer_ids @> to_jsonb(s.stripe_customer_id)`;
 

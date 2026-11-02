@@ -61,3 +61,14 @@ export function pctChange(current: number, previous: number): number | null {
   if (previous === 0) return null;
   return ((current - previous) / previous) * 100;
 }
+
+/** "$2,580 every 2 weeks", "$1,750 / month", "$12,000 / year" from stored billing items. */
+export function billingLabel(items: { amount_cents: number; interval: string; interval_count: number }[], currency = 'usd'): string {
+  return items
+    .map((i) => {
+      const n = Math.max(1, i.interval_count || 1);
+      const amt = formatMoney(i.amount_cents, currency, { cents: i.amount_cents % 100 !== 0 });
+      return n === 1 ? `${amt} / ${i.interval}` : `${amt} every ${n} ${i.interval}s`;
+    })
+    .join(' + ');
+}

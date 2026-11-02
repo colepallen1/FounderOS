@@ -12,7 +12,7 @@ import { TaskChecklist } from '@/components/TaskChecklist';
 import { Badge, Empty, NotConfigured, PageHeader, Panel, STATUS_TONE, Stat, Tabs } from '@/components/ui';
 import { fmtAgo, fmtDate, fmtNum, fmtTime } from '@/components/format';
 import { deleteClient, setStripeLinks, updateClient } from '@/lib/actions';
-import { formatMoney } from '@/lib/money';
+import { billingLabel, formatMoney } from '@/lib/money';
 import {
   adDaily,
   adTotals,
@@ -226,7 +226,8 @@ async function RevenueTab({ c, fixed, stripeOn }: { c: ClientSummary; fixed: { i
                   <th>Plan</th>
                   <th>Status</th>
                   <th>Renews</th>
-                  <th className="text-right">MRR</th>
+                  <th>Billing</th>
+                  <th className="text-right">Per month</th>
                 </tr>
               </thead>
               <tbody>
@@ -240,7 +241,8 @@ async function RevenueTab({ c, fixed, stripeOn }: { c: ClientSummary; fixed: { i
                       </div>
                     </td>
                     <td className="text-muted">{fmtDate(s.current_period_end)}</td>
-                    <td className="num text-right text-[15px]">{formatMoney(s.mrr_cents, s.currency)}</td>
+                    <td className="whitespace-nowrap text-muted">{s.items?.length ? billingLabel(s.items, s.currency) : '-'}</td>
+                    <td className="num text-right text-[15px]">{s.status === 'trialing' ? <span className="text-faint">from {fmtDate(s.current_period_end)}</span> : formatMoney(s.mrr_cents, s.currency)}</td>
                   </tr>
                 ))}
               </tbody>

@@ -3,7 +3,7 @@ import { ManualPaymentForm, PaymentsTable } from '@/components/Payments';
 import { ImportStripeButton } from '@/components/ImportStripeButton';
 import { Badge, Empty, NotConfigured, PageHeader, Panel, STATUS_TONE, Stat } from '@/components/ui';
 import { fmtDate } from '@/components/format';
-import { formatMoney } from '@/lib/money';
+import { billingLabel, formatMoney } from '@/lib/money';
 import { clientOptions, forecast, listPayments, listSubscriptions, moneySummary, stripeCustomers } from '@/lib/queries';
 import { ForecastPanel } from '@/components/ForecastPanel';
 import { configured } from '@/lib/sync';
@@ -74,7 +74,8 @@ export default async function Money({ searchParams }: { searchParams: { status?:
                   <th className="hidden sm:table-cell">Plan</th>
                   <th>Status</th>
                   <th>Renews</th>
-                  <th className="text-right">MRR</th>
+                  <th>Billing</th>
+                  <th className="text-right">Per month</th>
                 </tr>
               </thead>
               <tbody>
@@ -97,7 +98,8 @@ export default async function Money({ searchParams }: { searchParams: { status?:
                       </div>
                     </td>
                     <td className="whitespace-nowrap text-muted">{fmtDate(s.current_period_end)}</td>
-                    <td className="num text-right text-[15px]">{formatMoney(s.mrr_cents, s.currency)}</td>
+                    <td className="whitespace-nowrap text-muted">{s.items?.length ? billingLabel(s.items, s.currency) : '-'}</td>
+                    <td className="num text-right text-[15px]">{s.status === 'trialing' ? <span className="text-faint">from {fmtDate(s.current_period_end)}</span> : formatMoney(s.mrr_cents, s.currency)}</td>
                   </tr>
                 ))}
               </tbody>
