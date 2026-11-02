@@ -16,8 +16,23 @@ declare global {
   var __celoDb: Promise<Engine> | undefined;
 }
 
+/**
+ * The connection string, under whichever name the host set it. Vercel's Neon
+ * integration uses DATABASE_URL / POSTGRES_URL, or prefixes them (e.g.
+ * STORAGE_DATABASE_URL) when a custom prefix was chosen.
+ */
+export function databaseUrl(env: Record<string, string | undefined> = process.env): string | null {
+  for (const k of ['DATABASE_URL', 'POSTGRES_URL', 'POSTGRES_PRISMA_URL', 'DATABASE_URL_UNPOOLED', 'POSTGRES_URL_NON_POOLING']) {
+    if (env[k]) return env[k]!;
+  }
+  const prefixed = Object.keys(env)
+    .filter((k) => /_(DATABASE_URL|POSTGRES_URL)$/.test(k) && env[k])
+    .sort();
+  return prefixed.length ? env[prefixed[0]]! : null;
+}
+
 async function open(): Promise<Engine> {
-  const url = process.env.DATABASE_URL;
+  const url = databaseUrl();
   if (url) {
     const { default: postgres } = await import('postgres');
     const sql = postgres(url, {

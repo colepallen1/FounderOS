@@ -6,6 +6,7 @@ import { Badge, PageHeader, Panel } from '@/components/ui';
 import { fmtAgo } from '@/components/format';
 import { clearSecret, saveSecrets } from '@/lib/actions';
 import { appPassword, appSecret } from '@/lib/config';
+import { databaseUrl } from '@/lib/db';
 import { GOOGLE_ADS_VERSION, googleRedirectUri } from '@/lib/integrations/google';
 import { META_VERSION } from '@/lib/integrations/meta';
 import { getSecret, getSetting, mask, secretSource, type SecretKey } from '@/lib/settings';
@@ -183,7 +184,7 @@ export default async function Settings({ searchParams }: { searchParams: { googl
           </table>
           <div className="space-y-2 border-t border-line/60 p-5 text-[12.5px]">
             <div className="eyebrow mb-2">Server</div>
-            <Check ok={Boolean(process.env.DATABASE_URL)} label="DATABASE_URL" note={process.env.DATABASE_URL ? 'Postgres' : 'Local embedded database'} />
+            <Check ok={Boolean(databaseUrl())} label="DATABASE_URL" note={databaseUrl() ? 'Postgres' : 'Local embedded database'} />
             <Check ok={Boolean(appPassword())} label="CELO_PASSWORD" note={appPassword() ? 'Login required' : 'No login'} />
             <Check ok={vaultOk && Boolean(process.env.CELO_SECRET)} label="CELO_SECRET" note="Signs sessions, encrypts saved keys" />
             <Check ok={Boolean(process.env.CRON_SECRET)} label="CRON_SECRET" note="Scheduled background sync" />
