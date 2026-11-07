@@ -11,7 +11,7 @@ export type TreeNode = { id: string; name: string; status: string; effective_sta
 
 type Review = { summary: string; risk: 'spend' | 'material'; id: string };
 
-export function CampaignTree({ accountId, currency, nodes }: { accountId: string; currency: string; nodes: TreeNode[] }) {
+export function CampaignTree({ accountId, currency, nodes, readOnly = false }: { accountId: string; currency: string; nodes: TreeNode[]; readOnly?: boolean }) {
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [showOff, setShowOff] = useState(false);
   const [review, setReview] = useState<Review | null>(null);
@@ -50,7 +50,7 @@ export function CampaignTree({ accountId, currency, nodes }: { accountId: string
           </thead>
           <tbody>
             {rows.map(({ n, depth }) => (
-              <NodeRow key={n.id} n={n} depth={depth} accountId={accountId} currency={currency} open={open.has(n.id)} onToggle={() => toggle(n.id)} onReview={setReview} />
+              <NodeRow key={n.id} n={n} depth={depth} accountId={accountId} currency={currency} open={open.has(n.id)} onToggle={() => toggle(n.id)} onReview={setReview} readOnly={readOnly} />
             ))}
           </tbody>
         </table>
@@ -60,7 +60,13 @@ export function CampaignTree({ accountId, currency, nodes }: { accountId: string
   );
 }
 
-function NodeRow({ n, depth, accountId, currency, open, onToggle, onReview }: { n: TreeNode; depth: number; accountId: string; currency: string; open: boolean; onToggle: () => void; onReview: (r: Review) => void }) {
+function managerLink(accountId: string, n: TreeNode): string {
+  const act = accountId.replace(/^act_/, '');
+  const tab = n.level === 'campaign' ? 'campaigns' : n.level === 'adset' ? 'adsets' : 'ads';
+  return `https://adsmanager.facebook.com/adsmanager/manage/${tab}?act=${act}&selected_${n.level}_ids=${n.id}`;
+}
+
+function NodeRow({ n, depth, accountId, currency, open, onToggle, onReview, readOnly }: { n: TreeNode; depth: number; accountId: string; currency: string; open: boolean; onToggle: () => void; onReview: (r: Review) => void; readOnly: boolean }) {
   const [pending, start] = useTransition();
   const [editing, setEditing] = useState(false);
   const [budget, setBudget] = useState(n.daily_budget != null ? (n.daily_budget / 100).toString() : '');
@@ -112,6 +118,8 @@ function NodeRow({ n, depth, accountId, currency, open, onToggle, onReview }: { 
                 <Icon name="x" size={13} />
               </button>
             </span>
+          ) : n.daily_budget != null && readOnly ? (
+            <span className="num text-[14px]">{cur(n.daily_budget / 100, currency)}</span>
           ) : n.daily_budget != null ? (
             <button onClick={() => setEditing(true)} className="num group inline-flex items-center gap-1.5 text-[14px] hover:text-accent-hi" title="Change daily budget">
               {cur(n.daily_budget / 100, currency)} <span className="text-[10px] uppercase tracking-[0.12em] text-faint group-hover:text-accent">edit</span>
@@ -129,17 +137,20 @@ function NodeRow({ n, depth, accountId, currency, open, onToggle, onReview }: { 
         <td className="num text-right text-[14px]">{pct(n.m.ctr)}</td>
         <td className="whitespace-nowrap text-right">
           <span className="inline-flex gap-1.5">
-            {(n.status === 'ACTIVE' || n.status === 'PAUSED') && (
+            <a href={managerLink(accountId, n)} target="_blank" rel="noreferrer" className="btn-ghost px-2 py-1 text-[10.5px]" title="Open this in Meta Ads Manager">
+              Meta <Icon name="external" size={10} />
+            </a>
+            {!readOnly && (n.status === 'ACTIVE' || n.status === 'PAUSED') && (
               <button onClick={() => ask(running ? 'pause' : 'resume', `${running ? 'Pause' : 'Turn on'} "${n.name}"`)} disabled={pending} className="btn-ghost px-2 py-1 text-[10.5px]">
                 {running ? 'Pause' : 'Turn on'}
               </button>
             )}
-            {n.level === 'campaign' && (
+            {!readOnly && n.level === 'campaign' && (
               <button onClick={() => ask('duplicate', `Duplicate "${n.name}" (copy created paused)`)} disabled={pending} className="btn-ghost px-2 py-1 text-[10.5px]" title="Duplicate campaign">
                 Duplicate
               </button>
             )}
-            <button
+            {!readOnly && <button
               onClick={() => {
                 const name = prompt('New name', n.name);
                 if (name && name !== n.name) ask('rename', `Rename "${n.name}" → "${name}"`, { name });
@@ -148,7 +159,7 @@ function NodeRow({ n, depth, accountId, currency, open, onToggle, onReview }: { 
               className="btn-ghost px-2 py-1 text-[10.5px]"
             >
               Rename
-            </button>
+            </button>}
           </span>
         </td>
       </tr>

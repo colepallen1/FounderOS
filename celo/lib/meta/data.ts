@@ -88,7 +88,7 @@ export async function windowReach(accountId: string, level: 'account' | 'campaig
   try {
     const { token } = await accountToken(accountId);
     const idField = level === 'account' ? 'account_id' : `${level}_id`;
-    const raw = await graphAll<Record<string, string>>(token, `${accountId}/insights`, { level, time_range: { since: range.since, until: range.until }, fields: `${idField},reach,frequency,impressions`, limit: 500 }, 10);
+    const raw = await graphAll<Record<string, string>>(token, `${accountId}/insights`, { level, use_unified_attribution_setting: true, time_range: { since: range.since, until: range.until }, fields: `${idField},reach,frequency,impressions`, limit: 500 }, 10);
     const rows: Record<string, ReachRow> = {};
     for (const r of raw) {
       const id = level === 'account' ? accountId : r[idField];

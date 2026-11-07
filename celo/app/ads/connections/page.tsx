@@ -3,7 +3,9 @@ import { Badge, Empty, PageHeader, Panel } from '@/components/ui';
 import { AddConnectionForm, ConnectionButtons, LinkSelect } from '@/components/ads/ConnectionForms';
 import { fmtAgo } from '@/components/format';
 import { clientOptions } from '@/lib/queries';
-import { listAccounts, listConnections, migrateLegacyToken, REQUIRED_SCOPES } from '@/lib/meta/connections';
+import { listAccounts, listConnections, migrateLegacyToken, REQUIRED_SCOPES, WRITE_SCOPE } from '@/lib/meta/connections';
+import { isReadOnly } from '@/lib/meta/actions';
+import { ReadOnlyToggle } from '@/components/ads/ReadOnlyToggle';
 import { saveAccountTargets } from '@/lib/meta/ui-actions';
 
 export const metadata = { title: 'Meta connections' };
@@ -14,7 +16,7 @@ const ACCOUNT_STATUS: Record<number, string> = { 1: 'Active', 2: 'Disabled', 3: 
 
 export default async function Connections() {
   await migrateLegacyToken().catch(() => undefined);
-  const [connections, accounts, clients] = await Promise.all([listConnections(), listAccounts(), clientOptions()]);
+  const [connections, accounts, clients, readOnly] = await Promise.all([listConnections(), listAccounts(), clientOptions(), isReadOnly()]);
   return (
     <>
       <div className="mb-2 text-[12px]">
@@ -22,11 +24,20 @@ export default async function Connections() {
       </div>
       <PageHeader eyebrow="Meta" title="Connections" />
 
+      <Panel title="Safety" icon="lock" className="mb-4" action={<ReadOnlyToggle on={readOnly} />}>
+        <p className="text-[13px] leading-relaxed text-muted">
+          {readOnly
+            ? 'Read-only mode is on: Celo Command only reads from Meta. Pausing, budgets and campaign creation are hidden, and the server refuses any change.'
+            : 'Read-only mode is off: changes you approve here are sent to Meta and can affect live spend.'}{' '}
+          For a second lock that Meta itself enforces, generate the token without <code className="text-ink">ads_management</code>.
+        </p>
+      </Panel>
+
       <Panel title="Add a Meta Business" icon="plug">
         <AddConnectionForm />
         <p className="mt-4 text-[12px] leading-relaxed text-faint">
           In Meta Business Settings: Users → System users → add one (Admin), assign it the ad accounts and Pages you manage, then Generate token with{' '}
-          <code className="text-muted">{REQUIRED_SCOPES.join(', ')}</code> plus <code className="text-muted">pages_show_list, pages_read_engagement</code> (for choosing a Page when creating ads). System-user tokens do not expire. Each Business you
+          <code className="text-muted">{REQUIRED_SCOPES.join(', ')}</code>. Add <code className="text-muted">{WRITE_SCOPE}</code> only if you want to make changes from here (plus <code className="text-muted">pages_show_list, pages_read_engagement</code> for creating ads). Without it, Meta rejects any change this app could attempt. System-user tokens do not expire. Each Business you
           work in (yours, a partner's like Takeover Media) is its own connection; tokens are stored encrypted and only used for that Business's accounts.
         </p>
       </Panel>
@@ -59,6 +70,9 @@ export default async function Connections() {
                     {REQUIRED_SCOPES.map((s) => (
                       <span key={s} className={`mr-2 ${c.scopes.includes(s) ? 'text-good' : 'text-bad'}`}>{c.scopes.includes(s) ? '✓' : '✕'} {s}</span>
                     ))}
+                    <div className="mt-1">
+                      {c.scopes.includes(WRITE_SCOPE) ? <Badge tone="warn">Can make changes</Badge> : <Badge tone="good" icon="lock">Read-only token</Badge>}
+                    </div>
                   </td>
                   <td className="num text-[15px]">{c.account_count}</td>
                   <td className="text-[12px] text-faint">{fmtAgo(c.checked_at)}</td>

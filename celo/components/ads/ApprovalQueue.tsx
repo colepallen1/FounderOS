@@ -8,18 +8,18 @@ import { Icon } from '../Icon';
 
 const SOURCE = { you: 'You', rule: 'Rule', claude: 'Claude' } as const;
 
-export function ApprovalQueue({ actions, showClient = true }: { actions: MetaAction[]; showClient?: boolean }) {
-  if (!actions.length) return <div className="py-4 text-center text-sm text-faint">Nothing waiting for approval.</div>;
+export function ApprovalQueue({ actions, showClient = true, readOnly = false }: { actions: MetaAction[]; showClient?: boolean; readOnly?: boolean }) {
+  if (!actions.length) return <div className="py-4 text-center text-sm text-faint">{readOnly ? 'No recommendations right now.' : 'Nothing waiting for approval.'}</div>;
   return (
     <ul className="divide-y divide-line/60">
       {actions.map((a) => (
-        <ActionRow key={a.id} a={a} showClient={showClient} />
+        <ActionRow key={a.id} a={a} showClient={showClient} readOnly={readOnly} />
       ))}
     </ul>
   );
 }
 
-function ActionRow({ a, showClient }: { a: MetaAction; showClient: boolean }) {
+function ActionRow({ a, showClient, readOnly }: { a: MetaAction; showClient: boolean; readOnly: boolean }) {
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const approve = () => {
@@ -47,11 +47,17 @@ function ActionRow({ a, showClient }: { a: MetaAction; showClient: boolean }) {
           {error && <p className="mt-1.5 text-[12.5px] text-bad">{error}</p>}
         </div>
         <div className="flex shrink-0 gap-2">
+          {readOnly ? (
+            <a href={`https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=${a.account_id.replace(/^act_/, '')}`} target="_blank" rel="noreferrer" className="btn-ghost px-2.5 py-1.5">
+              Do in Ads Manager <Icon name="external" size={11} />
+            </a>
+          ) : (
           <button onClick={approve} disabled={pending} className="btn px-2.5 py-1.5">
             <Icon name="check" size={13} /> Approve
           </button>
+          )}
           <button onClick={() => start(() => rejectChange(a.id))} disabled={pending} className="btn-ghost px-2.5 py-1.5">
-            Reject
+            {readOnly ? 'Dismiss' : 'Reject'}
           </button>
         </div>
       </div>

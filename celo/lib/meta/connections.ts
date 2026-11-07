@@ -5,7 +5,9 @@ import { decryptSecret, encryptSecret } from '../token';
 import { getSecret } from '../settings';
 import { actId, graph, graphAll, GraphError } from './graph';
 
-export const REQUIRED_SCOPES = ['ads_read', 'ads_management', 'business_management'] as const;
+export const REQUIRED_SCOPES = ['ads_read', 'business_management'] as const;
+/** Only needed to make changes from Celo Command. Leave it off for a token that cannot change anything. */
+export const WRITE_SCOPE = 'ads_management';
 
 export type Connection = {
   id: string;

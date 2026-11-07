@@ -5,9 +5,10 @@ import { q } from '../db';
 import { addConnection, checkConnection, discoverAccounts, getAccount, removeConnection, setAccountClient, setAccountTargets } from './connections';
 import { syncAccount } from './sync';
 import { runRules } from './rules';
-import { approveAndExecute, propose, reject, type ActionKind, type CampaignPlan, planToStorySpec } from './actions';
+import { approveAndExecute, isReadOnly, propose, reject, type ActionKind, type CampaignPlan, planToStorySpec } from './actions';
 import { draftPreview, adPreview, PREVIEW_FORMATS, searchGeo, searchInterests, pages, pixels, audiences } from './lookup';
 import { analyze } from '../ai/ads-analyst';
+import { setSetting } from '../settings';
 import { checkBudgetChange } from '../integrations/meta-parse';
 
 type Result<T = unknown> = { ok: true; data?: T } | { ok: false; error: string };
@@ -88,8 +89,14 @@ export async function rerunRules(accountId: string): Promise<Result> {
 const RISK: Record<string, 'spend' | 'material'> = { pause: 'material', resume: 'spend', duplicate: 'material', rename: 'material', targeting: 'material', activate: 'spend' };
 
 /** A change you asked for: recorded as a proposal, shown for review, run only on approval. */
+export async function setReadOnly(on: boolean) {
+  await setSetting('meta.read_only', on ? 'on' : 'off');
+  done();
+}
+
 export async function requestChange(input: { account_id: string; kind: ActionKind; object_id: string; object_name: string; payload?: Record<string, unknown>; summary: string; from_budget?: number | null }): Promise<Result<string>> {
   try {
+    if (await isReadOnly()) return { ok: false, error: 'Read-only mode is on. Make changes in Ads Manager.' };
     let risk = RISK[input.kind] ?? 'material';
     if (input.kind === 'budget') {
       const next = Number(input.payload?.daily_budget);
@@ -183,6 +190,7 @@ export async function findInterests(accountId: string, query: string) {
 }
 
 export async function submitPlan(accountId: string, plan: CampaignPlan): Promise<Result<string>> {
+  if (await isReadOnly()) return { ok: false, error: 'Read-only mode is on. Create campaigns in Ads Manager.' };
   if (!plan.name || !plan.page_id || !plan.creative.link || !plan.creative.message || !plan.creative.headline) return { ok: false, error: 'Name, Page, link, primary text and headline are required.' };
   if (plan.daily_budget < 100) return { ok: false, error: 'Daily budget must be at least 1.00.' };
   if ((plan.objective === 'OUTCOME_LEADS' || plan.objective === 'OUTCOME_SALES') && !plan.pixel_id) return { ok: false, error: 'Leads and Sales campaigns need a pixel to optimise for.' };

@@ -65,6 +65,7 @@ async function syncInsights(token: string, account: AdAccount): Promise<number> 
     {
       level: 'ad',
       time_increment: 1,
+      use_unified_attribution_setting: true, // same attribution as Ads Manager columns
       time_range: { since, until: today },
       fields: 'ad_id,adset_id,campaign_id,spend,impressions,reach,clicks,inline_link_clicks,actions,action_values',
       limit: 500,
