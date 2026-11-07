@@ -8,7 +8,7 @@ import { NotesEditor } from '@/components/NotesEditor';
 import { Objectives } from '@/components/Objectives';
 import { PartnerClients } from '@/components/PartnerClients';
 import { clientAccounts } from '@/lib/meta/connections';
-import { listActions } from '@/lib/meta/actions';
+import { isReadOnly, listActions } from '@/lib/meta/actions';
 import { ApprovalQueue } from '@/components/ads/ApprovalQueue';
 import { q } from '@/lib/db';
 import { ManualPaymentForm, PaymentsTable } from '@/components/Payments';
@@ -388,7 +388,7 @@ async function AdsTab({ c, conn }: { c: ClientSummary; conn: Conn }) {
 }
 
 async function MetaControl({ c }: { c: ClientSummary }) {
-  const [accounts, pending] = await Promise.all([clientAccounts(c.id), listActions({ status: ['pending'], clientId: c.id })]);
+  const [accounts, pending, readOnly] = await Promise.all([clientAccounts(c.id), listActions({ status: ['pending'], clientId: c.id }), isReadOnly()]);
   if (!accounts.length) return null;
   return (
     <Panel
@@ -410,8 +410,8 @@ async function MetaControl({ c }: { c: ClientSummary }) {
       <p className="mt-3 text-[12px] text-faint">Campaigns, budgets, previews, alerts and Claude analysis live in Ads. Every change waits for approval.</p>
       {pending.length > 0 && (
         <div className="mt-4 border-t border-line/60 pt-3">
-          <div className="eyebrow mb-1">Waiting for approval · {pending.length}</div>
-          <ApprovalQueue actions={pending} showClient={false} />
+          <div className="eyebrow mb-1">{readOnly ? 'Recommendations' : 'Waiting for approval'} · {pending.length}</div>
+          <ApprovalQueue actions={pending} showClient={false} readOnly={readOnly} />
         </div>
       )}
     </Panel>

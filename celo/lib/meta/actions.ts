@@ -3,6 +3,12 @@ import { q, one, newId } from '../db';
 import { accountToken } from './connections';
 import { graph } from './graph';
 import { checkBudgetChange } from '../integrations/meta-parse';
+import { getSetting } from '../settings';
+
+/** Read-only mode (default ON): nothing is ever written to Meta, whatever is approved. */
+export async function isReadOnly(): Promise<boolean> {
+  return (await getSetting('meta.read_only')) !== 'off';
+}
 
 /**
  * The approval queue. Nothing here writes to Meta until execute() runs on an
@@ -72,6 +78,7 @@ export async function reject(id: string) {
 
 /** Approve and run. The claim (pending → approved) makes a double click or two tabs run it once. */
 export async function approveAndExecute(id: string): Promise<MetaAction> {
+  if (await isReadOnly()) throw new Error('Read-only mode is on: Celo Command does not change anything in Meta. Make this change in Ads Manager.');
   const claimed = await q(`UPDATE meta_actions SET status = 'approved', decided_at = now() WHERE id = $1 AND status = 'pending' RETURNING id`, [id]);
   if (!claimed.length) throw new Error('This action is no longer pending.');
   const a = (await getAction(id))!;

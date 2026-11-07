@@ -17,7 +17,8 @@ import { getSecret } from '@/lib/settings';
 import { listAccounts, listConnections, migrateLegacyToken } from '@/lib/meta/connections';
 import { dailySeries, parseRange, rowsFor, structure, totalsBy, windowReach } from '@/lib/meta/data';
 import { assessFatigue, compare, resultLabel, totals, windowEnding } from '@/lib/meta/analysis';
-import { listActions } from '@/lib/meta/actions';
+import { isReadOnly, listActions } from '@/lib/meta/actions';
+import { AutoSync } from '@/components/ads/AutoSync';
 import { latestReport } from '@/lib/ai/ads-analyst';
 
 export const metadata = { title: 'Ads' };
@@ -49,6 +50,7 @@ export default async function Ads({ searchParams }: { searchParams: { account?: 
   const range = parseRange(searchParams, today);
   const current = windowEnding(range.until, range.days);
   const lookback = windowEnding(range.until, range.days * 2 > 42 ? range.days * 2 : 42);
+  const readOnly = await isReadOnly();
   const [rows, { campaigns, adsets, ads }, acctReach, adReach, pending, alerts, report, claudeKey] = await Promise.all([
     rowsFor([account.id], { since: lookback.start, until: range.until }),
     structure([account.id]),
@@ -106,14 +108,27 @@ export default async function Ads({ searchParams }: { searchParams: { account?: 
   return (
     <>
       <PageHeader eyebrow={`Meta Ads · ${account.client_name ?? 'Not linked to a client'}`} title={account.name}>
-        <Link href={`/ads/new?account=${account.id}`} className="btn">
-          <Icon name="plus" size={14} /> Campaign
-        </Link>
+        {readOnly ? (
+          <a href={`https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=${account.id.replace(/^act_/, '')}`} target="_blank" rel="noreferrer" className="btn">
+            <Icon name="external" size={14} /> Open in Ads Manager
+          </a>
+        ) : (
+          <Link href={`/ads/new?account=${account.id}`} className="btn">
+            <Icon name="plus" size={14} /> Campaign
+          </Link>
+        )}
         <Link href="/ads/connections" className="btn-ghost">
           <Icon name="plug" size={14} /> Connections
         </Link>
       </PageHeader>
 
+      <AutoSync accountId={account.id} lastSynced={account.last_synced_at} />
+      {readOnly && (
+        <div className="panel mb-4 flex flex-wrap items-center gap-2 p-4 text-[13px] text-muted">
+          <Badge tone="good" icon="lock">Read-only</Badge>
+          Viewing only. Nothing here can change your campaigns; make changes in Ads Manager. Figures use the same attribution as Ads Manager.
+        </div>
+      )}
       <div className="mb-5 flex flex-wrap items-center gap-3">
         <AccountPicker current={account.id} accounts={accounts.map((a) => ({ id: a.id, label: `${a.client_name ? `${a.client_name} · ` : ''}${a.name}` }))} />
         <RangePicker current={range.days} />
@@ -151,8 +166,8 @@ export default async function Ads({ searchParams }: { searchParams: { account?: 
             <Empty>No spend in this period{synced ? '' : ' yet. Sync the account to pull its history'}.</Empty>
           )}
         </Panel>
-        <Panel title={`Waiting for approval${pending.length ? ` · ${pending.length}` : ''}`} icon="check" action={<Link href="/ads/activity" className="link text-[12px]">History</Link>}>
-          <ApprovalQueue actions={pending} showClient={false} />
+        <Panel title={`${readOnly ? 'Recommendations' : 'Waiting for approval'}${pending.length ? ` · ${pending.length}` : ''}`} icon="check" action={<Link href="/ads/activity" className="link text-[12px]">History</Link>}>
+          <ApprovalQueue actions={pending} showClient={false} readOnly={readOnly} />
         </Panel>
       </div>
 
@@ -166,7 +181,7 @@ export default async function Ads({ searchParams }: { searchParams: { account?: 
       </div>
 
       <Panel title="Campaigns" icon="ads" className="mt-4" pad={false}>
-        <div className="pt-3">{tree.length ? <CampaignTree accountId={account.id} currency={account.currency} nodes={tree} /> : <div className="p-5"><Empty>No campaigns synced for this account.</Empty></div>}</div>
+        <div className="pt-3">{tree.length ? <CampaignTree accountId={account.id} currency={account.currency} nodes={tree} readOnly={readOnly} /> : <div className="p-5"><Empty>No campaigns synced for this account.</Empty></div>}</div>
       </Panel>
 
       <Panel title="Creative leaderboard · by cost per result" icon="grid" className="mt-4" pad={false}>
