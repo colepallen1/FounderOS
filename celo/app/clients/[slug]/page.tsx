@@ -6,9 +6,10 @@ import { Icon } from '@/components/Icon';
 import { Kanban } from '@/components/Kanban';
 import { NotesEditor } from '@/components/NotesEditor';
 import { Objectives } from '@/components/Objectives';
-import { MetaCampaigns } from '@/components/MetaCampaigns';
 import { PartnerClients } from '@/components/PartnerClients';
-import { loadAccount, type MetaAccount } from '@/lib/integrations/meta-manage';
+import { clientAccounts } from '@/lib/meta/connections';
+import { listActions } from '@/lib/meta/actions';
+import { ApprovalQueue } from '@/components/ads/ApprovalQueue';
 import { q } from '@/lib/db';
 import { ManualPaymentForm, PaymentsTable } from '@/components/Payments';
 import { RecurringManager } from '@/components/Recurring';
@@ -370,7 +371,7 @@ async function AdsTab({ c, conn }: { c: ClientSummary; conn: Conn }) {
           />
         </Panel>
       )}
-      {c.meta_ad_account_id && conn.meta && <MetaControl c={c} />}
+      <MetaControl c={c} />
       <AdBlock a={meta} label="Meta Ads" />
       <AdBlock a={google} label="Google Ads" />
       {linked && !totals.length && (conn.meta || conn.google_ads) && (
@@ -387,38 +388,32 @@ async function AdsTab({ c, conn }: { c: ClientSummary; conn: Conn }) {
 }
 
 async function MetaControl({ c }: { c: ClientSummary }) {
-  let acct: MetaAccount | null = null;
-  let error: string | null = null;
-  try {
-    acct = await loadAccount(c.meta_ad_account_id);
-  } catch (err) {
-    error = err instanceof Error ? err.message : String(err);
-  }
-  const changes = await q<{ object_name: string; change: string; old_value: string; new_value: string; at: string }>(
-    `SELECT object_name, change, old_value, new_value, at::text FROM ad_changes WHERE client_id = $1 ORDER BY at DESC LIMIT 8`,
-    [c.id],
-  );
-  const unit = acct?.unit ?? 100;
-  const cur = acct?.currency ?? 'USD';
-  const show = (ch: string, v: string) => (ch === 'daily_budget' ? formatMoney(Math.round((Number(v) / unit) * 100), cur.toLowerCase(), { cents: true }) : v.toLowerCase());
+  const [accounts, pending] = await Promise.all([clientAccounts(c.id), listActions({ status: ['pending'], clientId: c.id })]);
+  if (!accounts.length) return null;
   return (
-    <Panel title="Meta campaigns · live" icon="ads" pad={false} action={<a href={`https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=${c.meta_ad_account_id.replace(/^act_/, '')}`} target="_blank" rel="noreferrer" className="link inline-flex items-center gap-1 text-[12px]">Ads Manager <Icon name="external" size={11} /></a>}>
-      <div className="pt-4">
-        {error ? <p className="px-5 pb-5 text-[13px] text-bad">{error}</p> : acct && <MetaCampaigns acct={acct} clientId={c.id} />}
-        {changes.length > 0 && (
-          <div className="border-t border-line/60 px-5 py-4">
-            <div className="eyebrow mb-2">Changes made here</div>
-            <ul className="space-y-1 text-[12.5px] text-muted">
-              {changes.map((ch, i) => (
-                <li key={i}>
-                  <span className="text-faint">{fmtDate(ch.at, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span> · {ch.object_name}:{' '}
-                  {ch.change === 'status' ? 'status' : 'daily budget'} {show(ch.change, ch.old_value)} → <span className="text-ink">{show(ch.change, ch.new_value)}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+    <Panel
+      title="Meta Ads Manager"
+      icon="ads"
+      action={
+        <Link href={`/clients/${c.slug}/report`} className="link inline-flex items-center gap-1 text-[12px]">
+          Client report <Icon name="arrowRight" size={11} />
+        </Link>
+      }
+    >
+      <div className="flex flex-wrap gap-2">
+        {accounts.map((a) => (
+          <Link key={a.id} href={`/ads?account=${a.id}`} className="btn-ghost">
+            <Icon name="ads" size={13} /> {a.name}
+          </Link>
+        ))}
       </div>
+      <p className="mt-3 text-[12px] text-faint">Campaigns, budgets, previews, alerts and Claude analysis live in Ads. Every change waits for approval.</p>
+      {pending.length > 0 && (
+        <div className="mt-4 border-t border-line/60 pt-3">
+          <div className="eyebrow mb-1">Waiting for approval · {pending.length}</div>
+          <ApprovalQueue actions={pending} showClient={false} />
+        </div>
+      )}
     </Panel>
   );
 }

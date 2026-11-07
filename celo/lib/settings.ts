@@ -17,6 +17,7 @@ export const SECRET_KEYS = {
   'google_ads.developer_token': 'GOOGLE_ADS_DEVELOPER_TOKEN',
   'google_ads.login_customer_id': 'GOOGLE_ADS_LOGIN_CUSTOMER_ID',
   'meta.access_token': 'META_ACCESS_TOKEN',
+  'anthropic.api_key': 'ANTHROPIC_API_KEY',
 } as const;
 export type SecretKey = keyof typeof SECRET_KEYS;
 

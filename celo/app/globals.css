@@ -288,3 +288,14 @@ body::before {
 @media (prefers-reduced-motion: reduce) {
   .live-dot { animation: none; }
 }
+
+/* Printing a report: light paper colours, no app chrome. */
+@media print {
+  :root, [data-theme='penthouse'], [data-theme='cave'] {
+    --bg: 255 255 255; --surface: 255 255 255; --raised: 248 248 248; --line: 220 220 220;
+    --ink: 20 20 20; --muted: 80 80 80; --faint: 130 130 130; --accent: 150 115 40; --accent-hi: 120 90 30;
+  }
+  body::before, aside, header.sticky, nav.fixed, .no-print { display: none !important; }
+  .panel { box-shadow: none; break-inside: avoid; }
+  main { padding: 0 !important; max-width: none !important; }
+}
