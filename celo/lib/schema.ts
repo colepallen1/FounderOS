@@ -173,6 +173,126 @@ CREATE TABLE IF NOT EXISTS ad_changes (
   at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- ── Ads Manager (added 2026-11-07) ────────────────────────────────────────
+-- One row per Meta Business connection (a system-user token, encrypted).
+CREATE TABLE IF NOT EXISTS meta_connections (
+  id TEXT PRIMARY KEY,
+  label TEXT NOT NULL,
+  token_enc TEXT NOT NULL,
+  meta_user_id TEXT NOT NULL DEFAULT '',
+  meta_user_name TEXT NOT NULL DEFAULT '',
+  scopes JSONB NOT NULL DEFAULT '[]',
+  status TEXT NOT NULL DEFAULT 'unchecked',
+  message TEXT NOT NULL DEFAULT '',
+  checked_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Ad accounts reachable through a connection; each may be linked to one client.
+CREATE TABLE IF NOT EXISTS meta_ad_accounts (
+  id TEXT PRIMARY KEY,                -- act_123
+  connection_id TEXT NOT NULL REFERENCES meta_connections(id) ON DELETE CASCADE,
+  client_id TEXT REFERENCES clients(id) ON DELETE SET NULL,
+  name TEXT NOT NULL DEFAULT '',
+  currency TEXT NOT NULL DEFAULT 'USD',
+  timezone TEXT NOT NULL DEFAULT '',
+  account_status INTEGER NOT NULL DEFAULT 1,
+  business_name TEXT NOT NULL DEFAULT '',
+  result_event TEXT NOT NULL DEFAULT '',     -- action_type counted as a result ('' = by objective)
+  target_cpa_cents INTEGER,
+  target_roas DOUBLE PRECISION,
+  frequency_ceiling DOUBLE PRECISION,
+  last_synced_at TIMESTAMPTZ,
+  sync_message TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS meta_ad_accounts_client ON meta_ad_accounts(client_id);
+
+-- Structure, refreshed on every sync.
+CREATE TABLE IF NOT EXISTS meta_campaigns (
+  id TEXT PRIMARY KEY, account_id TEXT NOT NULL, name TEXT NOT NULL, status TEXT NOT NULL, effective_status TEXT NOT NULL,
+  objective TEXT NOT NULL DEFAULT '', daily_budget DOUBLE PRECISION, lifetime_budget DOUBLE PRECISION, start_time TIMESTAMPTZ, stop_time TIMESTAMPTZ,
+  synced_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS meta_adsets (
+  id TEXT PRIMARY KEY, account_id TEXT NOT NULL, campaign_id TEXT NOT NULL, name TEXT NOT NULL, status TEXT NOT NULL,
+  effective_status TEXT NOT NULL, daily_budget DOUBLE PRECISION, lifetime_budget DOUBLE PRECISION, optimization_goal TEXT NOT NULL DEFAULT '',
+  targeting JSONB NOT NULL DEFAULT '{}', synced_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS meta_ads (
+  id TEXT PRIMARY KEY, account_id TEXT NOT NULL, campaign_id TEXT NOT NULL, adset_id TEXT NOT NULL, name TEXT NOT NULL,
+  status TEXT NOT NULL, effective_status TEXT NOT NULL, creative JSONB NOT NULL DEFAULT '{}', synced_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Daily ad-level insights. Reach is per day only: never summed into a window.
+CREATE TABLE IF NOT EXISTS meta_insights_daily (
+  ad_id TEXT NOT NULL, day DATE NOT NULL, account_id TEXT NOT NULL, campaign_id TEXT NOT NULL, adset_id TEXT NOT NULL,
+  spend_cents DOUBLE PRECISION NOT NULL DEFAULT 0, impressions DOUBLE PRECISION NOT NULL DEFAULT 0, reach DOUBLE PRECISION NOT NULL DEFAULT 0,
+  clicks DOUBLE PRECISION NOT NULL DEFAULT 0, link_clicks DOUBLE PRECISION NOT NULL DEFAULT 0,
+  actions JSONB NOT NULL DEFAULT '{}', action_values JSONB NOT NULL DEFAULT '{}',
+  PRIMARY KEY (ad_id, day)
+);
+CREATE INDEX IF NOT EXISTS meta_insights_account_day ON meta_insights_daily(account_id, day);
+
+-- Every write to Meta goes through here: proposed, approved, executed (or rejected / failed).
+CREATE TABLE IF NOT EXISTS meta_actions (
+  id TEXT PRIMARY KEY,
+  account_id TEXT NOT NULL,
+  client_id TEXT REFERENCES clients(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL,
+  object_id TEXT NOT NULL DEFAULT '',
+  object_name TEXT NOT NULL DEFAULT '',
+  payload JSONB NOT NULL DEFAULT '{}',
+  summary TEXT NOT NULL,
+  risk TEXT NOT NULL,               -- spend | material
+  source TEXT NOT NULL,             -- you | rule | claude
+  rationale TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'pending',
+  result JSONB NOT NULL DEFAULT '{}',
+  error TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  decided_at TIMESTAMPTZ,
+  executed_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS meta_actions_status ON meta_actions(status, created_at);
+
+-- Alerts from the rules engine.
+CREATE TABLE IF NOT EXISTS meta_alerts (
+  id TEXT PRIMARY KEY,
+  account_id TEXT NOT NULL,
+  client_id TEXT REFERENCES clients(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL,
+  severity TEXT NOT NULL,           -- info | warn | bad
+  object_id TEXT NOT NULL DEFAULT '',
+  object_name TEXT NOT NULL DEFAULT '',
+  message TEXT NOT NULL,
+  data JSONB NOT NULL DEFAULT '{}',
+  status TEXT NOT NULL DEFAULT 'open',
+  day DATE NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (account_id, kind, object_id, day)
+);
+
+-- Claude analyses and summaries.
+CREATE TABLE IF NOT EXISTS ai_reports (
+  id TEXT PRIMARY KEY,
+  client_id TEXT REFERENCES clients(id) ON DELETE CASCADE,
+  account_id TEXT NOT NULL,
+  kind TEXT NOT NULL,               -- daily | weekly | analysis
+  period_start DATE NOT NULL,
+  period_end DATE NOT NULL,
+  content JSONB NOT NULL,
+  model TEXT NOT NULL DEFAULT '',
+  usage JSONB NOT NULL DEFAULT '{}',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Short-lived cache of live Graph reads (reach and frequency for a date range).
+CREATE TABLE IF NOT EXISTS meta_cache (
+  key TEXT PRIMARY KEY,
+  value JSONB NOT NULL,
+  fetched_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- Repair (2026-11-02): JSON arrays once stored double-encoded as JSON strings.
 UPDATE clients SET stripe_customer_ids = (stripe_customer_ids #>> '{}')::jsonb WHERE jsonb_typeof(stripe_customer_ids) = 'string';
 UPDATE clients SET email_domains = (email_domains #>> '{}')::jsonb WHERE jsonb_typeof(email_domains) = 'string';

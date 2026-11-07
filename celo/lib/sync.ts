@@ -4,7 +4,7 @@ import { getSecret } from './settings';
 import { syncStripe } from './integrations/stripe';
 import { dedupeClients, importStripeClients } from './clients';
 import { syncCalendar, syncGmail, syncGoogleAds } from './integrations/google';
-import { syncMeta } from './integrations/meta';
+import { syncAllMeta } from './meta/sync';
 import { dueOccurrences, duePayments, toDay, type Cadence, type PayCadence } from './recurring';
 
 export type SourceId = 'stripe' | 'calendar' | 'gmail' | 'meta' | 'google_ads';
@@ -22,7 +22,7 @@ export const SOURCES: { id: SourceId; label: string; run: () => Promise<string> 
   },
   { id: 'calendar', label: 'Google Calendar', run: syncCalendar },
   { id: 'gmail', label: 'Gmail', run: syncGmail },
-  { id: 'meta', label: 'Meta Ads', run: syncMeta },
+  { id: 'meta', label: 'Meta Ads', run: syncAllMeta },
   { id: 'google_ads', label: 'Google Ads', run: syncGoogleAds },
 ];
 
@@ -35,8 +35,9 @@ export async function configured(): Promise<Record<SourceId, boolean>> {
     getSecret('google_ads.developer_token'),
     getSecret('meta.access_token'),
   ]);
+  const metaConnections = await one<{ n: number }>(`SELECT count(*)::int AS n FROM meta_connections`);
   const google = Boolean(gid && gsec && grefresh);
-  return { stripe: Boolean(stripe), calendar: google, gmail: google, meta: Boolean(meta), google_ads: google && Boolean(adsDev) };
+  return { stripe: Boolean(stripe), calendar: google, gmail: google, meta: Boolean(meta) || (metaConnections?.n ?? 0) > 0, google_ads: google && Boolean(adsDev) };
 }
 
 export type SyncRun = { source: SourceId; last_started_at: string | null; last_ok_at: string | null; ok: boolean; message: string };

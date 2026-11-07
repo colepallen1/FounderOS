@@ -11,6 +11,7 @@ const NAV: { href: string; label: string; icon: IconName }[] = [
   { href: '/', label: 'Command', icon: 'command' },
   { href: '/clients', label: 'Clients', icon: 'clients' },
   { href: '/work', label: 'Work', icon: 'work' },
+  { href: '/ads', label: 'Ads', icon: 'ads' },
   { href: '/money', label: 'Money', icon: 'money' },
   { href: '/settings', label: 'Integrations', icon: 'plug' },
 ];
@@ -21,7 +22,7 @@ function active(path: string, href: string) {
 
 export function Shell({ children, theme, authOff, configured, partners = [] }: { children: ReactNode; theme: 'penthouse' | 'cave'; authOff: boolean; configured: boolean; partners?: { name: string; slug: string }[] }) {
   const path = usePathname();
-  if (path === '/login') return <>{children}</>;
+  if (path === '/login' || path.startsWith('/r/')) return <>{children}</>;
   return (
     <div className="relative z-10 flex min-h-screen">
       <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-line bg-surface/70 backdrop-blur lg:flex">
@@ -98,7 +99,7 @@ export function Shell({ children, theme, authOff, configured, partners = [] }: {
       </div>
 
       {/* Phone: bottom tab bar. */}
-      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-6 border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
         {NAV.map((n) => {
           const on = active(path, n.href);
           return (

@@ -8,7 +8,7 @@ import { clearSecret, saveSecrets } from '@/lib/actions';
 import { appPassword, appSecret } from '@/lib/config';
 import { databaseUrl } from '@/lib/db';
 import { GOOGLE_ADS_VERSION, googleRedirectUri } from '@/lib/integrations/google';
-import { META_VERSION } from '@/lib/integrations/meta';
+import { MODEL as AI_MODEL } from '@/lib/ai/ads-analyst';
 import { getSecret, getSetting, mask, secretSource, type SecretKey } from '@/lib/settings';
 import { SOURCES, configured, syncRuns } from '@/lib/sync';
 
@@ -50,7 +50,7 @@ function StatusBadge({ on, label = 'Connected' }: { on: boolean; label?: string 
 export default async function Settings({ searchParams }: { searchParams: { google?: string } }) {
   const h = headers();
   const origin = `${h.get('x-forwarded-proto') ?? 'http'}://${h.get('x-forwarded-host') ?? h.get('host')}`;
-  const [conn, runs, googleEmail, gid, gsec] = await Promise.all([configured(), syncRuns(), getSetting('google.email'), getSecret('google.client_id'), getSecret('google.client_secret')]);
+  const [conn, runs, googleEmail, gid, gsec, claude] = await Promise.all([configured(), syncRuns(), getSetting('google.email'), getSecret('google.client_id'), getSecret('google.client_secret'), getSecret('anthropic.api_key')]);
   const webhook = await syncRuns().then((r) => r.get('stripe_webhook' as never));
   const webhookStatus = await getSetting('stripe.webhook_status');
   const g = searchParams.google;
@@ -145,15 +145,29 @@ export default async function Settings({ searchParams }: { searchParams: { googl
 
         {/* Meta */}
         <Panel title="Meta Ads" icon="ads" action={<StatusBadge on={conn.meta} />}>
-          <form id="meta" action={saveSecrets} className="space-y-4">
+          <div id="meta" className="space-y-3 text-[13px] text-muted">
+            <p>Meta now connects per Business Manager (yours, and each partner's), with every ad account linked to a client.</p>
+            <a href="/ads/connections" className="btn">
+              <Icon name="plug" size={14} /> Manage Meta connections
+            </a>
+            <p className="text-[11px] text-faint">A token saved here before is moved into a connection named "Default" automatically.</p>
+          </div>
+        </Panel>
+
+        {/* Claude */}
+        <Panel title="Claude · AI analysis" icon="target" action={<StatusBadge on={Boolean(claude)} />}>
+          <form id="claude" action={saveSecrets} className="space-y-4">
             <SecretField
-              k="meta.access_token"
-              label="System user access token"
-              placeholder="EAAG..."
-              hint="Business Settings, System users, add the client ad accounts, Generate token with ads_management (to pause and change budgets from here) and ads_read. System user tokens do not expire."
+              k="anthropic.api_key"
+              label="Anthropic API key"
+              placeholder="sk-ant-..."
+              hint={
+                <>
+                  From console.anthropic.com → API keys. Used for ad analysis, daily and weekly summaries. Model: {AI_MODEL}. Claude only reads numbers and proposes changes; nothing it suggests runs without your approval.
+                </>
+              }
             />
-            <button className="btn">Save Meta</button>
-            <p className="text-[11px] text-faint">Graph API {META_VERSION}. Override with META_API_VERSION.</p>
+            <button className="btn">Save Claude</button>
           </form>
         </Panel>
 

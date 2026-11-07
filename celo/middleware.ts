@@ -3,7 +3,7 @@ import { SESSION_COOKIE, appSecret, authDisabled } from '@/lib/config';
 import { verifySessionToken } from '@/lib/token';
 
 // Routes that authenticate themselves (signature / bearer secret) or are the login itself.
-const PUBLIC = ['/login', '/api/auth/login', '/api/webhooks/stripe', '/api/cron/sync', '/api/ops'];
+const PUBLIC = ['/login', '/api/auth/login', '/api/webhooks/stripe', '/api/cron/sync', '/api/cron/briefings', '/api/ops', '/r'];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;

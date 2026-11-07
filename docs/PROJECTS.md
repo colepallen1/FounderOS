@@ -6,6 +6,8 @@ Live board of what is being built in this repo. Absolute dates only.
 |---|---|---|---|
 | Celo Command (Celo Digital internal dashboard) | v1 merged 2026-11-02; Vercel project `founder-os` created (founder-os-pi-eight.vercel.app), live with Neon + Stripe syncing (2026-11-02) | Operator: Google, then Meta | `docs/projects/celo-command/` (code in `celo/`) |
 
+| Celo Ads Manager (Meta campaigns, analytics, Claude, approvals, client reports) | Built 2026-11-07, tested against API stand-ins | Operator: Meta system-user token, Anthropic API key | `docs/projects/meta-ads-manager/` |
+
 ## Checklist
 - [x] Celo Command v1: clients, client pages, work board, recurring tasks, money, integrations, two themes
 - [x] Vercel project created (root dir `celo`), env vars set (2026-11-02)
@@ -14,5 +16,6 @@ Live board of what is being built in this repo. Absolute dates only.
 - [x] Stripe customers auto-import as clients; recurring off-Stripe payments (2026-11-02)
 - [ ] !Greg: set up his recurring ACH payment (pay day unknown)
 - [ ] !Create Google OAuth client, connect Google; add Ads developer token
-- [ ] !Paste Meta system user token; set ad account IDs per client
+- [ ] !Ads → Connections: add Meta system-user token (ads_read, ads_management, business_management), link accounts to clients
+- [ ] !Integrations → Claude: add Anthropic API key
 - [ ] Choose background sync cadence (Vercel Pro cron or external pinger)
